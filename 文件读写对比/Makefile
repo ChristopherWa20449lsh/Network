@@ -12,6 +12,9 @@ normal: normal.cpp
 buffer: buffer.cpp
 	$(CC) $(CFLAGS) -I$(OPENSSL_INCLUDE) -L$(OPENSSL_LIB) -o buffer buffer.cpp -lssl -lcrypto
 
+test: test.cpp
+	$(CC) $(CFLAGS) -o test test.cpp
+
 compare:
 	./generate
 	./normal

@@ -386,14 +386,14 @@ void *CHttpProtocol::ClientThread(LPVOID param)
 		pHttpProtocol->err_exit("Analyzing request from client error!!\r\n");
 	}
 
-	// ????????????
+	// 发送头部headers
 	if (!pHttpProtocol->SSLSendHeader(pReq, io))
 	{
 		pHttpProtocol->err_exit("Sending fileheader error!\r\n");
 	}
 	BIO_flush(io);
 
-	// ??client????????
+	// 发送主体Body
 	if (pReq->nMethod == METHOD_GET)
 	{
 		printf("Sending..............................\n");
@@ -409,47 +409,46 @@ void *CHttpProtocol::ClientThread(LPVOID param)
 	SSL_free(ssl);
 	return NULL;
 }
-// HTTP请求分析函数
+// HTTP请求分析函数(就是构造PREQUEST结构体)
 int CHttpProtocol::Analyze(PREQUEST pReq, LPBYTE pBuf)
 {
-	// ??????????????
-	char szSeps[] = " \n";
-	char *cpToken;
-	// ??????????
+	char szSeps[] = " \n"; // 用于分割的字符串，包括空格和换行符(是有空格就分割，有换行符就分割)
+	char *cpToken;		   // 用于存放分割后的字符串
+	// ..是请求访问父级目录，这是安全风险，直接返回400 Bad Request，拒绝请求
 	if (strstr((const char *)pBuf, "..") != NULL)
 	{
 		strcpy(pReq->StatuCodeReason, HTTP_STATUS_BADREQUEST);
 		return 1;
 	}
 
-	// ?§Ø?ruquest??mothed
-	cpToken = strtok((char *)pBuf, szSeps); // ???????????????????????
-	if (!strcmp(cpToken, "GET"))			// GET????
+	cpToken = strtok((char *)pBuf, szSeps); // 将获取到的请求头分割成一个个字符串，存放在cpToken中（这里是分割第一次，也就是说cpToken中的内容是GET）
+	if (!strcmp(cpToken, "GET"))			// GET请求
 	{
 		pReq->nMethod = METHOD_GET;
 	}
-	else if (!strcmp(cpToken, "HEAD")) // HEAD????
+	else if (!strcmp(cpToken, "HEAD")) // 也是HTTP请求方法，只是不返回实体主体
 	{
 		pReq->nMethod = METHOD_HEAD;
 	}
 	else
 	{
+		// 未实现的协议内容
 		strcpy(pReq->StatuCodeReason, HTTP_STATUS_NOTIMPLEMENTED);
 		return 1;
 	}
 
-	// ???Request-URI
+	// 获取文件路径
 	cpToken = strtok(NULL, szSeps);
 	if (cpToken == NULL)
 	{
 		strcpy(pReq->StatuCodeReason, HTTP_STATUS_BADREQUEST);
 		return 1;
 	}
-
+	// 首先设置根目录 /home/WebServer
 	strcpy(pReq->szFileName, m_strRootDir);
 	if (strlen(cpToken) > 1)
 	{
-		strcat(pReq->szFileName, cpToken); // ???????????????¦Â???¦Ã?¡¤??
+		strcat(pReq->szFileName, cpToken); // 拼接得到完整文件路径
 	}
 	else
 	{
@@ -463,7 +462,7 @@ int CHttpProtocol::Analyze(PREQUEST pReq, LPBYTE pBuf)
 int CHttpProtocol::FileExist(PREQUEST pReq)
 {
 	pReq->hFile = open(pReq->szFileName, O_RDONLY);
-	// ??????????????????????
+	// 文件不存在
 	if (pReq->hFile == -1)
 	{
 		strcpy(pReq->StatuCodeReason, HTTP_STATUS_NOTFOUND);
@@ -487,10 +486,9 @@ void CHttpProtocol::Test(PREQUEST pReq)
 	fl = buf.st_size;
 	printf("Filesize = %d \r\n", fl);
 }
-
+// 获取系统当前时间（转换为字符串？）
 void CHttpProtocol::GetCurrentTime(LPSTR lpszString)
 {
-	// ???????????????????
 	char *week[] = {
 		"Sun,",
 		"Mon,",
@@ -500,7 +498,6 @@ void CHttpProtocol::GetCurrentTime(LPSTR lpszString)
 		"Fri,",
 		"Sat,",
 	};
-	// ?????????????¡¤????
 	char *month[] = {
 		"Jan",
 		"Feb",
@@ -515,23 +512,20 @@ void CHttpProtocol::GetCurrentTime(LPSTR lpszString)
 		"Nov",
 		"Dec",
 	};
-	// ?????????
 	struct tm *st;
 	long ct;
 	ct = time(&ct);
 	st = (struct tm *)localtime(&ct);
-	// ???????
 	sprintf(lpszString, "%s %02d %s %d %02d:%02d:%02d GMT", week[st->tm_wday], st->tm_mday, month[st->tm_mon],
 			1900 + st->tm_year, st->tm_hour, st->tm_min, st->tm_sec);
 }
-
+// 获取文件类型
 bool CHttpProtocol::GetContentType(PREQUEST pReq, LPSTR type)
 {
-	// ????????????
 	char *cpToken;
 	cpToken = strstr(pReq->szFileName, ".");
 	strcpy(pReq->postfix, cpToken);
-	// ?????????????????????content-type
+	// 文件后缀根据HTTP协议设置Content-Type字段
 	map<char *, char *>::iterator it = m_typeMap.find(pReq->postfix);
 	if (it != m_typeMap.end())
 	{
@@ -539,19 +533,20 @@ bool CHttpProtocol::GetContentType(PREQUEST pReq, LPSTR type)
 	}
 	return 1;
 }
-
+// 发送HTTP头部（接受一个PREQUEST类型的指针，其中PREQUEST的内容在Analyze函数中分析得到）
 bool CHttpProtocol::SSLSendHeader(PREQUEST pReq, BIO *io)
 {
 	char Header[2048] = " ";
 	int n = FileExist(pReq);
-	if (!n) // ?????????????
+	if (!n) // 请求资源不存在
 	{
 		err_exit("The file requested doesn't exist!");
 	}
 
 	char curTime[50];
-	GetCurrentTime(curTime);
-	// ??????????
+	GetCurrentTime(curTime); // 反正就是获取到了字符串形式的当前时间
+	// stat 结构体通常用于存储文件或文件系统的信息
+	// 可以使用 stat 函数来获取文件的信息，并将信息存储在 stat 结构体中
 	struct stat buf;
 	long length;
 	if (stat(pReq->szFileName, &buf) < 0)
@@ -560,7 +555,7 @@ bool CHttpProtocol::SSLSendHeader(PREQUEST pReq, BIO *io)
 	}
 	length = buf.st_size;
 
-	// ????????????
+	// 获取文件类型和Content-Type字段
 	char ContentType[50] = " ";
 	GetContentType(pReq, (char *)ContentType);
 
@@ -576,7 +571,7 @@ bool CHttpProtocol::SSLSendHeader(PREQUEST pReq, BIO *io)
 	{
 		return false;
 	}
-	BIO_flush(io);
+	BIO_flush(io); // 只是确保所有的IO操作都已经完成了
 	printf("SSLSendHeader successfully!\n");
 	return true;
 }
@@ -596,10 +591,9 @@ bool CHttpProtocol::SSLSendFile(PREQUEST pReq, BIO *io)
 	DWORD dwRead;		// 读取文件的字节数
 	BOOL fRet;			// 读取文件的返回值
 	int flag = 1, nReq; // flag用于标记是否读取完文件，nReq用于记录BIO_write的返回值
-	// 读取文件内容并发送给客户端
 	while (1)
 	{
-		// 读取文件内容到缓冲区
+		// 读取文件内容到缓冲区（一次读取最多2048个字节）
 		fRet = read(pReq->hFile, buf, sizeof(buf));
 		// printf("%d,%d\n",fRet,pReq->hFile);
 		// 文件不存在或者读取失败
@@ -608,7 +602,6 @@ bool CHttpProtocol::SSLSendFile(PREQUEST pReq, BIO *io)
 			// printf("!fRet\n");
 			static char szMsg[512];
 			sprintf(szMsg, "%s", HTTP_STATUS_SERVERERROR);
-			//
 			if ((nReq = BIO_write(io, szMsg, strlen(szMsg))) <= 0)
 			{
 				err_exit("BIO_write() error!\n");
@@ -617,14 +610,13 @@ bool CHttpProtocol::SSLSendFile(PREQUEST pReq, BIO *io)
 			break;
 		}
 
-		// ???
+		// 读取完文件
 		if (fRet == 0)
 		{
 			printf("complete \n");
 			break;
 		}
-		// ??buffer????????client
-		// if(BIO_puts(io, buf) <= 0)//????
+		// 通过BIO接口发送文件内容
 		if (BIO_write(io, buf, fRet) <= 0)
 		{
 			if (!BIO_should_retry(io))
@@ -634,16 +626,15 @@ bool CHttpProtocol::SSLSendFile(PREQUEST pReq, BIO *io)
 			}
 		}
 		BIO_flush(io);
-		// ??????????
 		pReq->dwSend += fRet;
 	}
-	// ??????
+	// 关闭文件
 	if (close(pReq->hFile) == 0)
 	{
 		pReq->hFile = -1;
 		return true;
 	}
-	else // ????
+	else
 	{
 		err_exit("Closing file error!");
 	}
