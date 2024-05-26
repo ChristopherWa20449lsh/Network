@@ -9,8 +9,8 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #define BUFFSIZE 2048
-#define SERVER_IP "127.0.0.1" // 指定服务端的IP，记得修改为你的服务端所在的ip
-#define SERVER_PORT 16555     // 指定服务端的port
+#define SERVER_IP "10.128.164.63" // 指定服务端的IP，记得修改为你的服务端所在的ip
+#define SERVER_PORT 16555         // 指定服务端的port
 int main()
 {
     struct sockaddr_in servaddr;
