@@ -5,12 +5,14 @@
 #define MAXLINK 5
 
 char *CHttpProtocol::pass = PASSWORD;
+
+// 构造函数，初始化SSL_CTX对象
 CHttpProtocol::CHttpProtocol(void)
 {
 	bio_err = 0;
-	m_strRootDir = "/home/WebServer"; // ??????¡¤??
+	m_strRootDir = "/home/WebServer"; // web根目录
 	ErrorMsg = "";
-	// ?????????????
+	// 初始化SSL_CTX对象
 	ErrorMsg = initialize_ctx();
 	if (ErrorMsg == "")
 	{
@@ -19,10 +21,9 @@ CHttpProtocol::CHttpProtocol(void)
 	else
 		printf("%s \n", ErrorMsg);
 }
-
+// 释放SSL_CTX对象包含的所有资源（直接类比free函数即可）
 CHttpProtocol::~CHttpProtocol(void)
 {
-	// ???SSL?????????
 	SSL_CTX_free(ctx);
 }
 
@@ -32,11 +33,13 @@ char *CHttpProtocol::initialize_ctx()
 
 	if (!bio_err)
 	{
-		// ?????OpenSSL??,????OpenSSL???????????
+		// OpenSSL库初始化
 		SSL_library_init();
-		// ????????????
+		// 载入所有SSL算法
+		OpenSSL_add_all_algorithms();
+		// 载入所有 SSL 错误消息
 		SSL_load_error_strings();
-		// An error write context
+		// 设置一个错误输出接口，用于将OpenSSL的错误消息输出到标准错误
 		bio_err = BIO_new_fp(stderr, BIO_NOCLOSE);
 	}
 	else
@@ -44,28 +47,29 @@ char *CHttpProtocol::initialize_ctx()
 		return "initialize_ctx() error!";
 	}
 
-	// Create our context
+	// 指定SSL协议版本
 	meth = SSLv23_method();
+	// 创建SSL_CTX对象
 	ctx = SSL_CTX_new(meth);
 
-	// ???????????????
+	// 设置证书链文件（是用于给客户端验证服务端身份的）
 	if (!(SSL_CTX_use_certificate_chain_file(ctx, SERVERPEM)))
 	{
 		char *Str = "SSL_CTX_use_certificate_chain_file error!";
 		return Str;
 	}
 
-	// ??????????????
+	// 设置SSL会话的密码回调函数（用于加密解密私钥文件）
 	SSL_CTX_set_default_passwd_cb(ctx, password_cb);
 
-	// ?????????
+	// 设置服务端私钥
 	if (!(SSL_CTX_use_PrivateKey_file(ctx, SERVERKEYPEM, SSL_FILETYPE_PEM)))
 	{
 		char *Str = "SSL_CTX_use_PrivateKey_file error!";
 		return Str;
 	}
 
-	// ?????????¦Å?CA???
+	// 是用于加载验证客户端证书的根证书链文件
 	if (!(SSL_CTX_load_verify_locations(ctx, ROOTCERTPEM, 0)))
 	{
 		char *Str = "SSL_CTX_load_verify_locations error!";
@@ -229,7 +233,18 @@ int CHttpProtocol::TcpListen()
 
 	return sock;
 }
-// SSL请求接收函数
+// SSL请求接收函数（只能处理get请求，因为只读取了头部数据）
+// 一个典型的HTTP请求如下：
+/* GET请求范例
+GET /index.html HTTP/1.1
+Host: www.example.com
+User-Agent: Mozilla/5.0
+Accept-Language: en-US,en;q=0.5
+Accept-Encoding: gzip, deflate, br
+Connection: keep-alive
+
+主体内容为空（上面是\r\n）
+*/
 bool CHttpProtocol::SSLRecvRequest(SSL *ssl, BIO *io, LPBYTE pBuf, DWORD dwBufSize)
 {
 	// printf("SSLRecvRequest \n");
@@ -239,6 +254,7 @@ bool CHttpProtocol::SSLRecvRequest(SSL *ssl, BIO *io, LPBYTE pBuf, DWORD dwBufSi
 	memset(buf, 0, BUFSIZZ); // 清空缓冲区
 	while (1)
 	{
+		// 从io中读取一行数据，存放到buf中
 		r = BIO_gets(io, buf, BUFSIZZ - 1);
 		// printf("r = %d\r\n",r);
 		switch (SSL_get_error(ssl, r))
@@ -252,14 +268,14 @@ bool CHttpProtocol::SSLRecvRequest(SSL *ssl, BIO *io, LPBYTE pBuf, DWORD dwBufSi
 			// printf("Case 2... \r\n");
 			break;
 		}
-		// ???????????HTTP????????????
+		// 在 HTTP 协议中，头部和主体之间的分隔符是一个空行
+		// 这里读取到说明对于HTTP头部的读取已经完成
 		if (!strcmp(buf, "\r\n") || !strcmp(buf, "\n"))
 		{
 			printf("IF...\r\n");
 			break;
 		}
 	}
-	// ?????????
 	pBuf[length] = '\0';
 	return true;
 }
@@ -324,39 +340,34 @@ void *CHttpProtocol::ClientThread(LPVOID param)
 	printf("Starting ClientThread... \n");
 	int nRet;
 	SSL *ssl;
-	BYTE buf[4096];
+	BYTE buf[4096]; // 缓冲区
 	BIO *sbio, *io, *ssl_bio;
 	PREQUEST pReq = (PREQUEST)param;
 	CHttpProtocol *pHttpProtocol = (CHttpProtocol *)pReq->pHttpProtocol;
 	// pHttpProtocol->CountUp();
-	SOCKET s = pReq->Socket;
+	SOCKET s = pReq->Socket; // 和客户端的通信socket
 
-	sbio = BIO_new_socket(s, BIO_NOCLOSE); // ???????socket?????BIO????
-	ssl = SSL_new(pReq->ssl_ctx);		   // ???????SSL????
-	SSL_set_bio(ssl, sbio, sbio);		   // ??SSL??????socket?????BIO??
-										   // ???????????SSL_accept?????§µ???????¨²???cpu
-	nRet = SSL_accept(ssl);
-	// nRet<=0?????????
+	// 这里就是给SSL_read和SSL_write套了个娃
+	sbio = BIO_new_socket(s, BIO_NOCLOSE); // sbio是和客户端的通信接口
+	ssl = SSL_new(pReq->ssl_ctx);		   // 基于ctx创建一个新的SSL对象
+	SSL_set_bio(ssl, sbio, sbio);		   // 将sbio和ssl关联起来，这样当ssl对象读写数据时，就会通过sbio来读写数据
+
+	nRet = SSL_accept(ssl); // SSL握手，建立安全连接
 	if (nRet <= 0)
 	{
 		pHttpProtocol->err_exit("SSL_accept()error! \r\n");
-		// return 0;
 	}
+	// 安全连接建立成功，开始处理客户端请求
+	// 设置缓冲读取，可以大大提高读取效率
+	io = BIO_new(BIO_f_buffer());
+	ssl_bio = BIO_new(BIO_f_ssl());
+	BIO_set_ssl(ssl_bio, ssl, BIO_CLOSE); // ssl_bio和ssl关联
+	BIO_push(io, ssl_bio);				  // 缓冲区和ssl_bio关联
 
-	io = BIO_new(BIO_f_buffer());		  // ????????????????BIO??§Õ????????????????????
-										  // ???????BIO?????????????????????????????
-										  // ??BIO?????????
-	ssl_bio = BIO_new(BIO_f_ssl());		  // ?????openssl ??SSL§¿???BIO???????????SSL§¿????
-										  // ?????§»BIO??????????
-	BIO_set_ssl(ssl_bio, ssl, BIO_CLOSE); // ??ssl(SSL????)?????ssl_bio(SSL_BIO????)??
-	BIO_push(io, ssl_bio);				  // ??ssl_bio?????????????BIO?????§µ????????????
-										  // ???????BIO_*???????????????????IO????,???????SSL???????????§Õ
-
-	// ????request data
+	// 开始获取客户端请求数据
 	printf("****************\r\n");
 	if (!pHttpProtocol->SSLRecvRequest(ssl, io, buf, sizeof(buf)))
 	{
-		// ????????
 		pHttpProtocol->err_exit("Receiving SSLRequest error!! \r\n");
 	}
 	else
@@ -365,10 +376,11 @@ void *CHttpProtocol::ClientThread(LPVOID param)
 		printf("%s \n", buf);
 		// return 0;
 	}
+	// 开始分析客户端请求
 	nRet = pHttpProtocol->Analyze(pReq, buf);
 	if (nRet)
 	{
-		// ????????
+		// 分析请求失败，直接断开连接
 		pHttpProtocol->Disconnect(pReq);
 		delete pReq;
 		pHttpProtocol->err_exit("Analyzing request from client error!!\r\n");
@@ -397,7 +409,7 @@ void *CHttpProtocol::ClientThread(LPVOID param)
 	SSL_free(ssl);
 	return NULL;
 }
-
+// HTTP请求分析函数
 int CHttpProtocol::Analyze(PREQUEST pReq, LPBYTE pBuf)
 {
 	// ??????????????
