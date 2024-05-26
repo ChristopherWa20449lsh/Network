@@ -9,11 +9,11 @@ DIST=common.cpp \
 	HttpProtocol.cpp \
 	HttpProtocol.h \
 	MyWebServer.cpp \
-  
+
 MyWebServer: common.o MyWebServer.o HttpProtocol.o
 	$(CC) common.o MyWebServer.o HttpProtocol.o -o MyWebServer $(LD)
 
-clean:	
+clean:
 	rm *.o MyWebServer
 dist:
 	rm -rf ${DISTDIR}; mkdir ${DISTDIR}

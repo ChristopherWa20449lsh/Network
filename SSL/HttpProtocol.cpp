@@ -2,6 +2,8 @@
 #include <sys/stat.h>
 #include "HttpProtocol.h"
 
+#define MAXLINK 5
+
 char *CHttpProtocol::pass = PASSWORD;
 CHttpProtocol::CHttpProtocol(void)
 {
@@ -128,10 +130,9 @@ void CHttpProtocol::Disconnect(PREQUEST pReq)
 	//	stats.dwSend = pReq->dwSend;
 	//	SendMessage(m_hwndDlg, DATA_MSG, (UINT)&stats, NULL);
 }
-
+// 创建文件拓展名映射表（用于设置响应头中的Content-Type字段）
 void CHttpProtocol::CreateTypeMap()
 {
-	// ?????map
 	m_typeMap[".doc"] = "application/msword";
 	m_typeMap[".bin"] = "application/octet-stream";
 	m_typeMap[".dll"] = "application/octet-stream";
@@ -207,31 +208,35 @@ void CHttpProtocol::CreateTypeMap()
 int CHttpProtocol::TcpListen()
 {
 	int sock;
-	struct sockaddr_in sin;
+	struct sockaddr_in sin; // 用于存放ip和端口的数据结构
 
-	if ((sock = socket(PF_INET, SOCK_STREAM, 0)) < 0) // ?????????§¿????????
+	// PF_INET：ipv4协议，SOCK_STREAM：TCP协议
+	if ((sock = socket(PF_INET, SOCK_STREAM, 0)) < 0) // 创建socket失败直接退出
 		err_exit("Couldn't make socket");
 
 	memset(&sin, 0, sizeof(sin));
-	sin.sin_addr.s_addr = INADDR_ANY;
-	sin.sin_family = PF_INET;
-	sin.sin_port = htons(8000); // ???????8000
+	sin.sin_addr.s_addr = htonl(INADDR_ANY); // 允许任意ip地址建立TCP连接(htonl转换为网络字节序)
+	sin.sin_family = PF_INET;				 // ipv4协议
+	sin.sin_port = htons(HTTPSPORT);		 // 8000端口
 
-	if (bind(sock, (struct sockaddr *)&sin, sizeof(struct sockaddr)) < 0) // ?????????
+	if (-1 == bind(sock, (struct sockaddr *)&sin, sizeof(sin))) // 绑定ip和端口
 		err_exit("Couldn't bind");
-	listen(sock, 5); // ???????
-	// printf("TcpListen Ok\n");
+	// listen函数本身并不处理连接请求，它只是设置套接字为监听模式，并指定了最大的连接请求队列长度。当客户端向服务器发送连接请求时，这些请求会被放入一个队列中，队列的最大长度由listen函数的第二个参数MAXLINK指定。
+	// 真正接受并处理这些连接请求的是accept函数。当accept函数被调用时，它会从队列中取出一个连接请求来处理，如果队列为空（即没有客户端发送连接请求），accept函数会阻塞，直到有新的连接请求到来。
+	if (-1 == listen(sock, MAXLINK))
+		err_exit("TcpListen error!");
+	printf("TcpListen Ok\n");
 
 	return sock;
 }
-
+// SSL请求接收函数
 bool CHttpProtocol::SSLRecvRequest(SSL *ssl, BIO *io, LPBYTE pBuf, DWORD dwBufSize)
 {
 	// printf("SSLRecvRequest \n");
 	char buf[BUFSIZZ];
 	int r, length = 0;
 
-	memset(buf, 0, BUFSIZZ); // ???????????
+	memset(buf, 0, BUFSIZZ); // 清空缓冲区
 	while (1)
 	{
 		r = BIO_gets(io, buf, BUFSIZZ - 1);
@@ -265,7 +270,7 @@ bool CHttpProtocol::StartHttpSrv()
 	printf("*******************Server starts************************ \n");
 
 	pid_t pid;
-	m_listenSocket = TcpListen(); // ???¨¹?????????????????
+	m_listenSocket = TcpListen(); // 创建TCP监听套接字，监听8000端口
 
 	pthread_t listen_tid;
 	pthread_create(&listen_tid, NULL, &ListenThread, this);
@@ -277,20 +282,21 @@ void *CHttpProtocol::ListenThread(LPVOID param)
 
 	CHttpProtocol *pHttpProtocol = (CHttpProtocol *)param;
 
-	SOCKET socketClient;
+	SOCKET socketClient; // 用于和客户端通信的socket
 	pthread_t client_tid;
 	struct sockaddr_in SockAddr;
 	PREQUEST pReq;
 	socklen_t nLen;
 	DWORD dwRet;
 
-	while (1) // ??????,???§á??????????,????????????????
+	while (1) // 循环调用accept接受新连接，并为每个新的连接创建一个新的线程来处理客户端请求
 	{
 		// printf("while!\n");
 		nLen = sizeof(SockAddr);
-		// ???????????,??????????????????????????
+		// 创建客户数据接收套接字（SockAddr用于接收客户端的相关信息）
+		// accept就是从listen的队列中取出一个连接请求，如果队列为空（即没有客户端发送连接请求），accept函数会阻塞，直到有新的连接请求到来。
 		socketClient = accept(pHttpProtocol->m_listenSocket, (LPSOCKADDR)&SockAddr, &nLen);
-		// printf("%s ",inet_ntoa(SockAddr.sin_addr));
+		printf("%s ", inet_ntoa(SockAddr.sin_addr)); // 输出客户端连接ip
 		if (socketClient == INVALID_SOCKET)
 		{
 			printf("INVALID_SOCKET !\n");
@@ -305,7 +311,7 @@ void *CHttpProtocol::ListenThread(LPVOID param)
 		pReq->pHttpProtocol = pHttpProtocol;
 		pReq->ssl_ctx = pHttpProtocol->ctx;
 
-		// ????client?????????request
+		// 对每个新的连接创建一个新的线程（处理函数为ClientThread,传递参数为pReq）
 		// printf("New request");
 		pthread_create(&client_tid, NULL, &ClientThread, pReq);
 	} // while
@@ -322,7 +328,7 @@ void *CHttpProtocol::ClientThread(LPVOID param)
 	BIO *sbio, *io, *ssl_bio;
 	PREQUEST pReq = (PREQUEST)param;
 	CHttpProtocol *pHttpProtocol = (CHttpProtocol *)pReq->pHttpProtocol;
-	// pHttpProtocol->CountUp();				// ????
+	// pHttpProtocol->CountUp();
 	SOCKET s = pReq->Socket;
 
 	sbio = BIO_new_socket(s, BIO_NOCLOSE); // ???????socket?????BIO????

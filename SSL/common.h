@@ -82,17 +82,17 @@ typedef void *HANDLE;
 typedef struct REQUEST
 {
 	HANDLE hExit;
-	SOCKET Socket;			   // �����socket
-	int nMethod;			   // �����ʹ�÷�����GET��HEAD
-	DWORD dwRecv;			   // �յ����ֽ���
-	DWORD dwSend;			   // ���͵��ֽ���
-	int hFile;				   // �������ӵ��ļ�
-	char szFileName[256];	   // �ļ������·��
-	char postfix[10];		   // �洢��չ��
-	char StatuCodeReason[100]; // ͷ����status cod�Լ�reason-phrase
+	SOCKET Socket;			   //
+	int nMethod;			   // 请求方法
+	DWORD dwRecv;			   // 接收到的字节数
+	DWORD dwSend;			   // 发送的字节数
+	int hFile;				   // 文件句柄
+	char szFileName[256];	   // 文件路径
+	char postfix[10];		   // 文件后缀
+	char StatuCodeReason[100]; // HTTP状态码
 	bool permitted;			   // �û�Ȩ���ж�
-	char *authority;		   // �û��ṩ����֤��Ϣ
-	char key[1024];			   // ��ȷ��֤��Ϣ
+	char *authority;		   // 用户提供的认证信息
+	char key[1024];			   // 用于验证用户身份的密钥
 	SSL_CTX *ssl_ctx;
 	void *pHttpProtocol; // ָ����CHttpProtocol��ָ��
 } REQUEST, *PREQUEST;
