@@ -1,7 +1,9 @@
 # Generated automatically from Makefile.in by configure.
-CC=g++
-CFLAGS=-g -I/usr/local/openssl/include/  -Wall
-LD=-L/usr/local/openssl/lib  -lssl -lcrypto -ldl -lpthread
+CC = g++
+OPENSSL_INCLUDE = /opt/homebrew/opt/openssl@1.1/include
+OPENSSL_LIB = /opt/homebrew/opt/openssl@1.1/lib
+CFLAGS=-g -I$(OPENSSL_INCLUDE) -Wall
+LD=-L$(OPENSSL_LIB) -lssl -lcrypto -ldl -lpthread
 DISTDIR=Test
 
 DIST=common.cpp \
@@ -10,11 +12,24 @@ DIST=common.cpp \
 	HttpProtocol.h \
 	MyWebServer.cpp \
 
+common.o: common.cpp common.h
+	$(CC) $(CFLAGS) -c common.cpp
+
+HttpProtocol.o: HttpProtocol.cpp HttpProtocol.h
+	$(CC) $(CFLAGS) -c HttpProtocol.cpp
+
+MyWebServer.o: MyWebServer.cpp
+	$(CC) $(CFLAGS) -c MyWebServer.cpp
+
 MyWebServer: common.o MyWebServer.o HttpProtocol.o
-	$(CC) common.o MyWebServer.o HttpProtocol.o -o MyWebServer $(LD)
+	$(CC) $(CFLAGS) common.o MyWebServer.o HttpProtocol.o -o MyWebServer $(LD)
+
+Client: Client.cpp
+	$(CC) $(CFLAGS) Client.cpp -o Client $(LD)
 
 clean:
-	rm *.o MyWebServer
+	rm -f *.o MyWebServer Client
+	rm -f *.crt *.key *.pem *.csr *.srl
 dist:
 	rm -rf ${DISTDIR}; mkdir ${DISTDIR}
 	cp ${DIST} ${DISTDIR}

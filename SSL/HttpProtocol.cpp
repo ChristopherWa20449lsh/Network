@@ -1,5 +1,6 @@
 #include "common.h"
 #include <sys/stat.h>
+// #include <sys/socket.h>
 #include "HttpProtocol.h"
 
 #define MAXLINK 5
@@ -9,17 +10,20 @@ char *CHttpProtocol::pass = PASSWORD;
 // 构造函数，初始化SSL_CTX对象
 CHttpProtocol::CHttpProtocol(void)
 {
+	printf("初始化SSL_CTX对象... \n");
 	bio_err = 0;
 	m_strRootDir = "/home/WebServer"; // web根目录
 	ErrorMsg = "";
 	// 初始化SSL_CTX对象
 	ErrorMsg = initialize_ctx();
+	printf("潜在错误信息: %s \n", ErrorMsg);
 	if (ErrorMsg == "")
 	{
 		ErrorMsg = load_dh_params(ctx, ROOTKEYPEM);
 	}
 	else
 		printf("%s \n", ErrorMsg);
+	printf("潜在错误信息: %s \n", ErrorMsg);
 }
 // 释放SSL_CTX对象包含的所有资源（直接类比free函数即可）
 CHttpProtocol::~CHttpProtocol(void)
@@ -29,8 +33,6 @@ CHttpProtocol::~CHttpProtocol(void)
 
 char *CHttpProtocol::initialize_ctx()
 {
-	const SSL_METHOD *meth;
-
 	if (!bio_err)
 	{
 		// OpenSSL库初始化
@@ -47,34 +49,43 @@ char *CHttpProtocol::initialize_ctx()
 		return "initialize_ctx() error!";
 	}
 
-	// 指定SSL协议版本
-	meth = SSLv23_method();
 	// 创建SSL_CTX对象
-	ctx = SSL_CTX_new(meth);
+	ctx = SSL_CTX_new(SSLv23_server_method());
 
-	// 设置证书链文件（是用于给客户端验证服务端身份的）
-	if (!(SSL_CTX_use_certificate_chain_file(ctx, SERVERPEM)))
-	{
-		char *Str = "SSL_CTX_use_certificate_chain_file error!";
-		return Str;
-	}
+	// 双向验证
+	// SSL_VERIFY_PEER---要求对证书进行认证，没有证书也会放行
+	// SSL_VERIFY_FAIL_IF_NO_PEER_CERT---要求客户端需要提供证书，但验证发现单独使用没有证书也会放行
+	// SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
 
 	// 设置SSL会话的密码回调函数（用于加密解密私钥文件）
 	SSL_CTX_set_default_passwd_cb(ctx, password_cb);
 
-	// 设置服务端私钥
-	if (!(SSL_CTX_use_PrivateKey_file(ctx, SERVERKEYPEM, SSL_FILETYPE_PEM)))
+	// 设置信任根证书
+	// if (SSL_CTX_load_verify_locations(ctx, "ca.crt", NULL) <= 0)
+	// {
+	// 	ERR_print_errors_fp(stdout);
+	// 	exit(1);
+	// }
+
+	/* 载入用户的数字证书， 此证书用来发送给客户端。 证书里包含有公钥 */
+	if (SSL_CTX_use_certificate_file(ctx, "server.crt", SSL_FILETYPE_PEM) <= 0)
 	{
-		char *Str = "SSL_CTX_use_PrivateKey_file error!";
-		return Str;
+		ERR_print_errors_fp(stdout);
+		exit(1);
+	}
+	/* 载入用户私钥 */
+	if (SSL_CTX_use_PrivateKey_file(ctx, "server_rsa_private.pem", SSL_FILETYPE_PEM) <= 0)
+	{
+		ERR_print_errors_fp(stdout);
+		exit(1);
+	}
+	/* 检查用户私钥是否正确 */
+	if (!SSL_CTX_check_private_key(ctx))
+	{
+		ERR_print_errors_fp(stdout);
+		exit(1);
 	}
 
-	// 是用于加载验证客户端证书的根证书链文件
-	if (!(SSL_CTX_load_verify_locations(ctx, ROOTCERTPEM, 0)))
-	{
-		char *Str = "SSL_CTX_load_verify_locations error!";
-		return Str;
-	}
 	return "";
 }
 
@@ -223,7 +234,7 @@ int CHttpProtocol::TcpListen()
 	sin.sin_family = PF_INET;				 // ipv4协议
 	sin.sin_port = htons(HTTPSPORT);		 // 8000端口
 
-	if (-1 == bind(sock, (struct sockaddr *)&sin, sizeof(sin))) // 绑定ip和端口
+	if (bind(sock, (struct sockaddr *)&sin, sizeof(sin)) == -1) // 绑定ip和端口
 		err_exit("Couldn't bind");
 	// listen函数本身并不处理连接请求，它只是设置套接字为监听模式，并指定了最大的连接请求队列长度。当客户端向服务器发送连接请求时，这些请求会被放入一个队列中，队列的最大长度由listen函数的第二个参数MAXLINK指定。
 	// 真正接受并处理这些连接请求的是accept函数。当accept函数被调用时，它会从队列中取出一个连接请求来处理，如果队列为空（即没有客户端发送连接请求），accept函数会阻塞，直到有新的连接请求到来。
@@ -287,6 +298,7 @@ bool CHttpProtocol::StartHttpSrv()
 
 	pid_t pid;
 	m_listenSocket = TcpListen(); // 创建TCP监听套接字，监听8000端口
+	printf("监听套接字编号：%d\n", m_listenSocket);
 
 	pthread_t listen_tid;
 	pthread_create(&listen_tid, NULL, &ListenThread, this);
@@ -311,8 +323,15 @@ void *CHttpProtocol::ListenThread(LPVOID param)
 		nLen = sizeof(SockAddr);
 		// 创建客户数据接收套接字（SockAddr用于接收客户端的相关信息）
 		// accept就是从listen的队列中取出一个连接请求，如果队列为空（即没有客户端发送连接请求），accept函数会阻塞，直到有新的连接请求到来。
-		socketClient = accept(pHttpProtocol->m_listenSocket, (LPSOCKADDR)&SockAddr, &nLen);
-		printf("%s ", inet_ntoa(SockAddr.sin_addr)); // 输出客户端连接ip
+
+		if (socketClient = accept(pHttpProtocol->m_listenSocket, (LPSOCKADDR)&SockAddr, &nLen) == -1)
+		{
+			printf("accept error(%d): %s\n", errno, strerror(errno));
+			break;
+		}
+		printf("服务端通信套接字编号：%d\n", socketClient);
+		printf("ip: %s\n", inet_ntoa(SockAddr.sin_addr)); // 输出客户端连接ip
+
 		if (socketClient == INVALID_SOCKET)
 		{
 			printf("INVALID_SOCKET !\n");
@@ -346,16 +365,24 @@ void *CHttpProtocol::ClientThread(LPVOID param)
 	CHttpProtocol *pHttpProtocol = (CHttpProtocol *)pReq->pHttpProtocol;
 	// pHttpProtocol->CountUp();
 	SOCKET s = pReq->Socket; // 和客户端的通信socket
+	printf("%d\n", s);
 
 	// 这里就是给SSL_read和SSL_write套了个娃
 	sbio = BIO_new_socket(s, BIO_NOCLOSE); // sbio是和客户端的通信接口
 	ssl = SSL_new(pReq->ssl_ctx);		   // 基于ctx创建一个新的SSL对象
 	SSL_set_bio(ssl, sbio, sbio);		   // 将sbio和ssl关联起来，这样当ssl对象读写数据时，就会通过sbio来读写数据
+	printf("开始尝试建立SSL连接... \n");
 
 	nRet = SSL_accept(ssl); // SSL握手，建立安全连接
+
+	printf("SSL连接建立... \n");
 	if (nRet <= 0)
 	{
 		pHttpProtocol->err_exit("SSL_accept()error! \r\n");
+	}
+	else
+	{
+		printf("SSL_accept() successfully! \n");
 	}
 	// 安全连接建立成功，开始处理客户端请求
 	// 设置缓冲读取，可以大大提高读取效率

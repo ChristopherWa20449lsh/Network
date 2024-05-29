@@ -26,11 +26,11 @@
 #define METHOD_HEAD 1
 
 #define BUFSIZZ 1024
-#define ROOTCERTPEM "root-cert.pem"
-#define ROOTKEYPEM "root-key.pem"
-#define SERVERKEYPEM "server-key.pem"
-#define SERVERPEM "server.pem"
-#define PASSWORD "OPENSSL"
+#define ROOTCERTPEM "ca.crt"
+#define ROOTKEYPEM "ca_rsa_private.pem"
+#define SERVERPEM "server.crt"
+#define SERVERKEYPEM "server_rsa_private.pem"
+#define PASSWORD "server"
 
 #define HTTP_STATUS_OK "200 OK"
 #define HTTP_STATUS_CREATED "201 Created"
