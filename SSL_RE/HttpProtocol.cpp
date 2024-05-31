@@ -13,12 +13,7 @@ CHttpProtocol::CHttpProtocol(void)
     ErrorMsg = "";
     // 初始化SSL_CTX对象
     ErrorMsg = initialize_ctx();
-    if (ErrorMsg == "")
-    {
-        ErrorMsg = load_dh_params(ctx, ROOTKEYPEM);
-    }
-    else
-        printf("%s \n", ErrorMsg);
+    printf("%s \n", ErrorMsg);
 }
 // 释放SSL_CTX对象包含的所有资源（直接类比free函数即可）
 CHttpProtocol::~CHttpProtocol(void)
@@ -85,29 +80,6 @@ char *CHttpProtocol::initialize_ctx()
     return "";
 }
 
-char *CHttpProtocol::load_dh_params(SSL_CTX *ctx, char *file)
-{
-    DH *ret = 0;
-    BIO *bio;
-
-    if ((bio = BIO_new_file(file, "r")) == NULL)
-    {
-        char *Str = "BIO_new_file error!";
-        return Str;
-    }
-
-    ret = PEM_read_bio_DHparams(bio, NULL, NULL, NULL);
-    BIO_free(bio);
-    if (SSL_CTX_set_tmp_dh(ctx, ret) < 0)
-    {
-        char *Str = "SSL_CTX_set_tmp_dh error!";
-        return Str;
-    }
-    printf("Diffie-Hellman 参数加载成功! \n");
-
-    return "";
-}
-
 int CHttpProtocol::password_cb(char *buf, int num, int rwflag, void *userdata)
 {
     if ((unsigned int)num < strlen(pass) + 1)
@@ -125,22 +97,6 @@ void CHttpProtocol::err_exit(char *str)
     exit(1);
 }
 
-void CHttpProtocol::Disconnect(PREQUEST pReq)
-{
-    int nRet;
-    printf("Closing socket! \r\n");
-
-    nRet = close(pReq->Socket);
-    if (nRet == SOCKET_ERROR)
-    {
-        printf("Closing socket error! \r\n");
-    }
-
-    //	HTTPSTATS	stats;
-    //	stats.dwRecv = pReq->dwRecv;
-    //	stats.dwSend = pReq->dwSend;
-    //	SendMessage(m_hwndDlg, DATA_MSG, (UINT)&stats, NULL);
-}
 // 创建文件拓展名映射表（用于设置响应头中的Content-Type字段）
 void CHttpProtocol::CreateTypeMap()
 {
@@ -240,52 +196,6 @@ int CHttpProtocol::TcpListen()
 
     return sock;
 }
-// SSL请求接收函数（只能处理get请求，因为只读取了头部数据）
-// 一个典型的HTTP请求如下：
-/* GET请求范例
-GET /index.html HTTP/1.1
-Host: www.example.com
-User-Agent: Mozilla/5.0
-Accept-Language: en-US,en;q=0.5
-Accept-Encoding: gzip, deflate, br
-Connection: keep-alive
-
-主体内容为空（上面是\r\n）
-*/
-bool CHttpProtocol::SSLRecvRequest(SSL *ssl, BIO *io, LPBYTE pBuf, DWORD dwBufSize)
-{
-    // printf("SSLRecvRequest \n");
-    char buf[BUFSIZZ];
-    int r, length = 0;
-
-    memset(buf, 0, BUFSIZZ); // 清空缓冲区
-    while (1)
-    {
-        // 从io中读取一行数据，存放到buf中
-        r = BIO_gets(io, buf, BUFSIZZ - 1);
-        // printf("r = %d\r\n",r);
-        switch (SSL_get_error(ssl, r))
-        {
-        case SSL_ERROR_NONE:
-            memcpy(&pBuf[length], buf, r);
-            length += r;
-            // printf("Case 1... \r\n");
-            break;
-        default:
-            // printf("Case 2... \r\n");
-            break;
-        }
-        // 在 HTTP 协议中，头部和主体之间的分隔符是一个空行
-        // 这里读取到说明对于HTTP头部的读取已经完成
-        if (!strcmp(buf, "\r\n") || !strcmp(buf, "\n"))
-        {
-            printf("IF...\r\n");
-            break;
-        }
-    }
-    pBuf[length] = '\0';
-    return true;
-}
 bool CHttpProtocol::StartHttpSrv()
 {
     CreateTypeMap();
@@ -296,8 +206,35 @@ bool CHttpProtocol::StartHttpSrv()
     m_listenSocket = TcpListen(); // 创建TCP监听套接字，监听8000端口
     printf("监听套接字编号：%d\n", m_listenSocket);
 
-    pthread_t listen_tid;
-    pthread_create(&listen_tid, NULL, &ListenThread, this);
+    while (1)
+    {
+        struct sockaddr_in SockAddr;
+        SOCKET socketClient;
+        socklen_t nLen = sizeof(SockAddr);
+        SSL *ssl;
+        if ((socketClient = accept(m_listenSocket, (LPSOCKADDR)&SockAddr, &nLen)) == -1)
+        {
+            printf("accept error(%d): %s\n", errno, strerror(errno));
+            break;
+        }
+        printf("服务端通信套接字编号：%d\n", socketClient);
+        printf("ip: %s\n", inet_ntoa(SockAddr.sin_addr));
+
+        ssl = SSL_new(ctx);
+        /* 将连接用户的 socket 加入到 SSL */
+        SSL_set_fd(ssl, socketClient);
+        /* 建立 SSL 连接 */
+        if (SSL_accept(ssl) == -1)
+        {
+            perror("accept");
+            close(socketClient);
+            break;
+        }
+        else
+        {
+            printf("SSL_accept() successfully! \n");
+        }
+    }
 }
 
 void *CHttpProtocol::ListenThread(LPVOID param)
@@ -344,7 +281,8 @@ void *CHttpProtocol::ListenThread(LPVOID param)
 
         // 对每个新的连接创建一个新的线程（处理函数为ClientThread,传递参数为pReq）
         // printf("New request");
-        pthread_create(&client_tid, NULL, &ClientThread, pReq);
+        // pthread_create(&client_tid, NULL, &ClientThread, pReq);
+        ClientThread(pReq);
     } // while
 
     return NULL;

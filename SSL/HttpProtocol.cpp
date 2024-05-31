@@ -3,6 +3,8 @@
 // #include <sys/socket.h>
 #include "HttpProtocol.h"
 
+using namespace std;
+
 #define MAXLINK 5
 
 char *CHttpProtocol::pass = PASSWORD;
@@ -10,20 +12,19 @@ char *CHttpProtocol::pass = PASSWORD;
 // 构造函数，初始化SSL_CTX对象
 CHttpProtocol::CHttpProtocol(void)
 {
+	CreateTypeMap();
 	printf("初始化SSL_CTX对象... \n");
 	bio_err = 0;
-	m_strRootDir = "/home/WebServer"; // web根目录
+	m_strRootDir = "/Users/wwt13/Documents/Network/SSL/WebServer"; // web根目录
 	ErrorMsg = "";
 	// 初始化SSL_CTX对象
 	ErrorMsg = initialize_ctx();
-	printf("潜在错误信息: %s \n", ErrorMsg);
 	if (ErrorMsg == "")
 	{
 		ErrorMsg = load_dh_params(ctx, ROOTKEYPEM);
 	}
 	else
 		printf("%s \n", ErrorMsg);
-	printf("潜在错误信息: %s \n", ErrorMsg);
 }
 // 释放SSL_CTX对象包含的所有资源（直接类比free函数即可）
 CHttpProtocol::~CHttpProtocol(void)
@@ -50,7 +51,7 @@ char *CHttpProtocol::initialize_ctx()
 	}
 
 	// 创建SSL_CTX对象
-	ctx = SSL_CTX_new(SSLv23_server_method());
+	ctx = SSL_CTX_new(TLSv1_2_server_method());
 
 	// 双向验证
 	// SSL_VERIFY_PEER---要求对证书进行认证，没有证书也会放行
@@ -61,20 +62,20 @@ char *CHttpProtocol::initialize_ctx()
 	SSL_CTX_set_default_passwd_cb(ctx, password_cb);
 
 	// 设置信任根证书
-	// if (SSL_CTX_load_verify_locations(ctx, "ca.crt", NULL) <= 0)
-	// {
-	// 	ERR_print_errors_fp(stdout);
-	// 	exit(1);
-	// }
+	if (SSL_CTX_load_verify_locations(ctx, ROOTCERTPEM, NULL) <= 0)
+	{
+		ERR_print_errors_fp(stdout);
+		exit(1);
+	}
 
 	/* 载入用户的数字证书， 此证书用来发送给客户端。 证书里包含有公钥 */
-	if (SSL_CTX_use_certificate_file(ctx, "server.crt", SSL_FILETYPE_PEM) <= 0)
+	if (SSL_CTX_use_certificate_file(ctx, SERVERPEM, SSL_FILETYPE_PEM) <= 0)
 	{
 		ERR_print_errors_fp(stdout);
 		exit(1);
 	}
 	/* 载入用户私钥 */
-	if (SSL_CTX_use_PrivateKey_file(ctx, "server_rsa_private.pem", SSL_FILETYPE_PEM) <= 0)
+	if (SSL_CTX_use_PrivateKey_file(ctx, SERVERKEYPEM, SSL_FILETYPE_PEM) <= 0)
 	{
 		ERR_print_errors_fp(stdout);
 		exit(1);
@@ -298,7 +299,6 @@ bool CHttpProtocol::StartHttpSrv()
 
 	pid_t pid;
 	m_listenSocket = TcpListen(); // 创建TCP监听套接字，监听8000端口
-	printf("监听套接字编号：%d\n", m_listenSocket);
 
 	pthread_t listen_tid;
 	pthread_create(&listen_tid, NULL, &ListenThread, this);
@@ -324,12 +324,11 @@ void *CHttpProtocol::ListenThread(LPVOID param)
 		// 创建客户数据接收套接字（SockAddr用于接收客户端的相关信息）
 		// accept就是从listen的队列中取出一个连接请求，如果队列为空（即没有客户端发送连接请求），accept函数会阻塞，直到有新的连接请求到来。
 
-		if (socketClient = accept(pHttpProtocol->m_listenSocket, (LPSOCKADDR)&SockAddr, &nLen) == -1)
+		if ((socketClient = accept(pHttpProtocol->m_listenSocket, (LPSOCKADDR)&SockAddr, &nLen)) == -1)
 		{
 			printf("accept error(%d): %s\n", errno, strerror(errno));
 			break;
 		}
-		printf("服务端通信套接字编号：%d\n", socketClient);
 		printf("ip: %s\n", inet_ntoa(SockAddr.sin_addr)); // 输出客户端连接ip
 
 		if (socketClient == INVALID_SOCKET)
@@ -365,25 +364,23 @@ void *CHttpProtocol::ClientThread(LPVOID param)
 	CHttpProtocol *pHttpProtocol = (CHttpProtocol *)pReq->pHttpProtocol;
 	// pHttpProtocol->CountUp();
 	SOCKET s = pReq->Socket; // 和客户端的通信socket
-	printf("%d\n", s);
 
 	// 这里就是给SSL_read和SSL_write套了个娃
 	sbio = BIO_new_socket(s, BIO_NOCLOSE); // sbio是和客户端的通信接口
 	ssl = SSL_new(pReq->ssl_ctx);		   // 基于ctx创建一个新的SSL对象
 	SSL_set_bio(ssl, sbio, sbio);		   // 将sbio和ssl关联起来，这样当ssl对象读写数据时，就会通过sbio来读写数据
-	printf("开始尝试建立SSL连接... \n");
 
 	nRet = SSL_accept(ssl); // SSL握手，建立安全连接
 
-	printf("SSL连接建立... \n");
 	if (nRet <= 0)
 	{
 		pHttpProtocol->err_exit("SSL_accept()error! \r\n");
 	}
 	else
 	{
-		printf("SSL_accept() successfully! \n");
+		printf("SSL连接建立... \n");
 	}
+
 	// 安全连接建立成功，开始处理客户端请求
 	// 设置缓冲读取，可以大大提高读取效率
 	io = BIO_new(BIO_f_buffer());
@@ -429,7 +426,7 @@ void *CHttpProtocol::ClientThread(LPVOID param)
 			return 0;
 		}
 	}
-	printf("File sent!!");
+	printf("Response sent!!\n");
 	// pHttpProtocol->Test(pReq);
 	pHttpProtocol->Disconnect(pReq);
 	delete pReq;
@@ -481,7 +478,9 @@ int CHttpProtocol::Analyze(PREQUEST pReq, LPBYTE pBuf)
 	{
 		strcat(pReq->szFileName, "/index.html");
 	}
-	printf("%s\r\n", pReq->szFileName);
+
+	char *postfix = strstr(pReq->szFileName, ".");
+	strcpy(pReq->postfix, postfix);
 
 	return 0;
 }
@@ -549,11 +548,8 @@ void CHttpProtocol::GetCurrentTime(LPSTR lpszString)
 // 获取文件类型
 bool CHttpProtocol::GetContentType(PREQUEST pReq, LPSTR type)
 {
-	char *cpToken;
-	cpToken = strstr(pReq->szFileName, ".");
-	strcpy(pReq->postfix, cpToken);
 	// 文件后缀根据HTTP协议设置Content-Type字段
-	map<char *, char *>::iterator it = m_typeMap.find(pReq->postfix);
+	map<string, const char *>::iterator it = m_typeMap.find(pReq->postfix);
 	if (it != m_typeMap.end())
 	{
 		sprintf(type, "%s", (*it).second);

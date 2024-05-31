@@ -4,13 +4,8 @@ OPENSSL_INCLUDE = /opt/homebrew/opt/openssl@1.1/include
 OPENSSL_LIB = /opt/homebrew/opt/openssl@1.1/lib
 CFLAGS=-g -I$(OPENSSL_INCLUDE) -Wall
 LD=-L$(OPENSSL_LIB) -lssl -lcrypto -ldl -lpthread
-DISTDIR=Test
 
-DIST=common.cpp \
-	common.h \
-	HttpProtocol.cpp \
-	HttpProtocol.h \
-	MyWebServer.cpp \
+.PHONY: clean Key
 
 common.o: common.cpp common.h
 	$(CC) $(CFLAGS) -c common.cpp
@@ -18,20 +13,18 @@ common.o: common.cpp common.h
 HttpProtocol.o: HttpProtocol.cpp HttpProtocol.h
 	$(CC) $(CFLAGS) -c HttpProtocol.cpp
 
-MyWebServer.o: MyWebServer.cpp
-	$(CC) $(CFLAGS) -c MyWebServer.cpp
+server.o: server.cpp
+	$(CC) $(CFLAGS) -c server.cpp
 
-MyWebServer: common.o MyWebServer.o HttpProtocol.o
-	$(CC) $(CFLAGS) common.o MyWebServer.o HttpProtocol.o -o MyWebServer $(LD)
+server: common.o server.o HttpProtocol.o
+	$(CC) $(CFLAGS) common.o server.o HttpProtocol.o -o server $(LD)
 
-Client: Client.cpp
-	$(CC) $(CFLAGS) Client.cpp -o Client $(LD)
+client: client.cpp
+	$(CC) $(CFLAGS) client.cpp -o client $(LD)
+
+Key:
+	./keygen.sh
 
 clean:
-	rm -f *.o MyWebServer Client
+	rm -f *.o server client
 	rm -f *.crt *.key *.pem *.csr *.srl
-dist:
-	rm -rf ${DISTDIR}; mkdir ${DISTDIR}
-	cp ${DIST} ${DISTDIR}
-	rm -f ${DISTFILE}
-	tar cf - ${DISTDIR} | gzip > ${DISTFILE}

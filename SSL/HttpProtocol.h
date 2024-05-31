@@ -1,14 +1,15 @@
 #include "common.h"
 
 #include <map>
+#include <string>
 using namespace std;
 
 class CHttpProtocol
 {
 public:
-	char *ErrorMsg;				   // 判断是否初始化过程中出错的消息
-	SOCKET m_listenSocket;		   // 创建监听套接字
-	map<char *, char *> m_typeMap; // 保存content-type和文件后缀的对应关系map
+	char *ErrorMsg;						 // 判断是否初始化过程中出错的消息
+	SOCKET m_listenSocket;				 // 创建监听套接字
+	map<string, const char *> m_typeMap; // 保存content-type和文件后缀的对应关系map
 	HANDLE m_hExit;
 
 	char *m_strRootDir; // web的根目录

@@ -5,6 +5,9 @@ int main()
 {
 	CHttpProtocol MyHttpObj;  // 创建一个CHttpProtocol对象
 	MyHttpObj.StartHttpSrv(); // 调用StartHttpSrv()
+	while (true)
+	{
+	}
 	// SSL *ssl;		// 创建一个SSL对象
 	// BYTE buf[4096]; // 创建一个缓冲区
 	// BIO *io;		// 创建一个BIO对象
