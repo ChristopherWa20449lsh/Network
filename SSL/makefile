@@ -11,7 +11,7 @@ common.o: common.cpp common.h
 	$(CC) $(CFLAGS) -c common.cpp
 
 HttpProtocol.o: HttpProtocol.cpp HttpProtocol.h
-	$(CC) $(CFLAGS) -c HttpProtocol.cpp
+	$(CC) $(CFLAGS) -std=c++11 -c HttpProtocol.cpp
 
 server.o: server.cpp
 	$(CC) $(CFLAGS) -c server.cpp

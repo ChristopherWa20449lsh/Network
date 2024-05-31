@@ -13,6 +13,7 @@
 #include <signal.h>
 #include <unistd.h>
 #include <string.h>
+#include <string>
 #include <pthread.h>
 
 #include <arpa/inet.h>
@@ -24,6 +25,8 @@
 #define HTTPSPORT 8000
 #define METHOD_GET 0
 #define METHOD_HEAD 1
+#define METHOD_POST 2
+#define METHOD_DELETE 3
 
 #define BUFSIZZ 1024
 #define ROOTCERTPEM "ca.crt"
@@ -47,6 +50,8 @@
 #define HTTP_STATUS_NOTIMPLEMENTED "501 Not Implemented"
 #define HTTP_STATUS_BADGATEWAY "502 Bad Gateway"
 #define HTTP_STATUS_UNAVAILABLE "503 Service Unavailable"
+
+using namespace std;
 
 typedef int INT;
 typedef unsigned int UINT;
@@ -87,6 +92,8 @@ typedef struct REQUEST
 	DWORD dwRecv;			   // 接收到的字节数
 	DWORD dwSend;			   // 发送的字节数
 	int hFile;				   // 文件句柄
+	int contentLength;		   // 内容长度
+	char content[256];		   // body
 	char szFileName[256];	   // 文件路径
 	char postfix[10];		   // 文件后缀
 	char StatuCodeReason[100]; // HTTP状态码
@@ -99,8 +106,10 @@ typedef struct REQUEST
 
 typedef struct HTTPSTATS
 {
-	DWORD dwRecv; // �յ��ֽ���
-	DWORD dwSend; // �����ֽ���
+	DWORD dwRecv;
+	DWORD dwSend;
 } HTTPSTATS, *PHTTPSTATS;
+
+string urlDecode(string str);
 
 #endif

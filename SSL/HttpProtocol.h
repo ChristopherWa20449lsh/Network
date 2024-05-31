@@ -49,6 +49,7 @@ public:
 	bool SSLRecvRequest(SSL *ssl, BIO *io, LPBYTE pBuf, DWORD dwBufSize); // 接收HTTPS请求
 	bool SSLSendHeader(PREQUEST pReq, BIO *io);							  // 发送HTTPS头
 	bool SSLSendFile(PREQUEST pReq, BIO *io);							  // 由SSL通道发送文件
+	bool SSLSendResponse(PREQUEST pReq, BIO *io);
 	bool SSLSendBuffer(PREQUEST pReq, LPBYTE pBuf, DWORD dwBufSize);
 
 public:

@@ -1,7 +1,10 @@
 #include "common.h"
 #include <sys/stat.h>
-// #include <sys/socket.h>
 #include "HttpProtocol.h"
+
+#include "json.hpp"
+
+using json = nlohmann::json;
 
 using namespace std;
 
@@ -235,7 +238,10 @@ int CHttpProtocol::TcpListen()
 	sin.sin_family = PF_INET;				 // ipv4协议
 	sin.sin_port = htons(HTTPSPORT);		 // 8000端口
 
-	if (bind(sock, (struct sockaddr *)&sin, sizeof(sin)) == -1) // 绑定ip和端口
+	// ::bind(sock, (struct sockaddr *)&sin, sizeof(sin));
+
+	// 使用全局bind而不是std::下的bind函数！！！！！！！！！
+	if (::bind(sock, (struct sockaddr *)&sin, sizeof(sin)) < 0) // 绑定ip和端口
 		err_exit("Couldn't bind");
 	// listen函数本身并不处理连接请求，它只是设置套接字为监听模式，并指定了最大的连接请求队列长度。当客户端向服务器发送连接请求时，这些请求会被放入一个队列中，队列的最大长度由listen函数的第二个参数MAXLINK指定。
 	// 真正接受并处理这些连接请求的是accept函数。当accept函数被调用时，它会从队列中取出一个连接请求来处理，如果队列为空（即没有客户端发送连接请求），accept函数会阻塞，直到有新的连接请求到来。
@@ -323,7 +329,7 @@ void *CHttpProtocol::ListenThread(LPVOID param)
 		nLen = sizeof(SockAddr);
 		// 创建客户数据接收套接字（SockAddr用于接收客户端的相关信息）
 		// accept就是从listen的队列中取出一个连接请求，如果队列为空（即没有客户端发送连接请求），accept函数会阻塞，直到有新的连接请求到来。
-
+		// printf("%d\n", nLen);
 		if ((socketClient = accept(pHttpProtocol->m_listenSocket, (LPSOCKADDR)&SockAddr, &nLen)) == -1)
 		{
 			printf("accept error(%d): %s\n", errno, strerror(errno));
@@ -410,22 +416,31 @@ void *CHttpProtocol::ClientThread(LPVOID param)
 		pHttpProtocol->err_exit("Analyzing request from client error!!\r\n");
 	}
 
-	// 发送头部headers
-	if (!pHttpProtocol->SSLSendHeader(pReq, io))
+	// 读取请求body
+	if (pReq->contentLength > 0)
 	{
+		char temp[256];
+		// 读取body内容
+		nRet = BIO_read(io, temp, pReq->contentLength);
+		if (nRet <= 0)
+		{
+			pHttpProtocol->Disconnect(pReq);
+			delete pReq;
+			pHttpProtocol->err_exit("Reading body error!!\r\n");
+		}
+		temp[pReq->contentLength] = '\0';
+		sprintf(pReq->content, "%s", urlDecode(temp).c_str());
+		printf("Body: %s \n", pReq->content);
+	}
+
+	printf("Ready to send Response!!\n");
+
+	if (!pHttpProtocol->SSLSendResponse(pReq, io))
+	{
+		printf("Sending response error!!\n");
 		pHttpProtocol->err_exit("Sending fileheader error!\r\n");
 	}
 	BIO_flush(io);
-
-	// 发送主体Body
-	if (pReq->nMethod == METHOD_GET)
-	{
-		printf("Sending..............................\n");
-		if (!pHttpProtocol->SSLSendFile(pReq, io))
-		{
-			return 0;
-		}
-	}
 	printf("Response sent!!\n");
 	// pHttpProtocol->Test(pReq);
 	pHttpProtocol->Disconnect(pReq);
@@ -454,6 +469,14 @@ int CHttpProtocol::Analyze(PREQUEST pReq, LPBYTE pBuf)
 	{
 		pReq->nMethod = METHOD_HEAD;
 	}
+	else if (!strcmp(cpToken, "POST"))
+	{
+		pReq->nMethod = METHOD_POST;
+	}
+	else if (!strcmp(cpToken, "DELETE"))
+	{
+		pReq->nMethod = METHOD_DELETE;
+	}
 	else
 	{
 		// 未实现的协议内容
@@ -479,8 +502,21 @@ int CHttpProtocol::Analyze(PREQUEST pReq, LPBYTE pBuf)
 		strcat(pReq->szFileName, "/index.html");
 	}
 
-	char *postfix = strstr(pReq->szFileName, ".");
-	strcpy(pReq->postfix, postfix);
+	// 接下来需要获取得到Body长度
+	while (1)
+	{
+		cpToken = strtok(NULL, szSeps);
+		if (cpToken == NULL)
+		{
+			break;
+		}
+		if (!strcmp(cpToken, "Content-Length:"))
+		{
+			cpToken = strtok(NULL, szSeps);
+			pReq->contentLength = atoi(cpToken);
+			break;
+		}
+	}
 
 	return 0;
 }
@@ -556,109 +592,160 @@ bool CHttpProtocol::GetContentType(PREQUEST pReq, LPSTR type)
 	}
 	return 1;
 }
+
 // 发送HTTP头部（接受一个PREQUEST类型的指针，其中PREQUEST的内容在Analyze函数中分析得到）
-bool CHttpProtocol::SSLSendHeader(PREQUEST pReq, BIO *io)
+bool CHttpProtocol::SSLSendResponse(PREQUEST pReq, BIO *io)
 {
 	char Header[2048] = " ";
-	int n = FileExist(pReq);
-	if (!n) // 请求资源不存在
+	if (pReq->nMethod == METHOD_GET && !FileExist(pReq))
 	{
+		// 文件不存在
 		err_exit("The file requested doesn't exist!");
 	}
 
 	char curTime[50];
 	GetCurrentTime(curTime); // 反正就是获取到了字符串形式的当前时间
-	// stat 结构体通常用于存储文件或文件系统的信息
-	// 可以使用 stat 函数来获取文件的信息，并将信息存储在 stat 结构体中
-	struct stat buf;
-	long length;
-	if (stat(pReq->szFileName, &buf) < 0)
+
+	if (pReq->nMethod == METHOD_HEAD || pReq->nMethod == METHOD_GET)
 	{
-		err_exit("Getting filesize error!!\r\n");
-	}
-	length = buf.st_size;
-
-	// 获取文件类型和Content-Type字段
-	char ContentType[50] = " ";
-	GetContentType(pReq, (char *)ContentType);
-
-	sprintf((char *)Header, "HTTP/1.1 %s\r\nDate: %s\r\nServer: %s\r\nContent-Type: %s\r\nContent-Length: %d\r\n\r\n",
-			HTTP_STATUS_OK,
-			curTime,						// Date
-			"Villa Server 192.168.176.139", // Server"My Https Server"
-			ContentType,					// Content-Type
-			length);						// Content-length
-
-	// if(BIO_puts(io, Header) <= 0)//????
-	if (BIO_write(io, Header, strlen(Header)) <= 0) // ????
-	{
-		return false;
-	}
-	BIO_flush(io); // 只是确保所有的IO操作都已经完成了
-	printf("SSLSendHeader successfully!\n");
-	return true;
-}
-
-// 通过SSL发送文件（接受一个PREQUEST类型的指针，并通过BIO接口发送数据）
-bool CHttpProtocol::SSLSendFile(PREQUEST pReq, BIO *io)
-{
-	// printf("%s\n",pReq->szFileName);
-	int n = FileExist(pReq); // 检查文件是否存在
-	// 文件不存在，直接调用err_exit函数退出
-	if (!n)
-	{
-		err_exit("The file requested doesn't exist!");
-	}
-
-	static char buf[2048];
-	DWORD dwRead;		// 读取文件的字节数
-	BOOL fRet;			// 读取文件的返回值
-	int flag = 1, nReq; // flag用于标记是否读取完文件，nReq用于记录BIO_write的返回值
-	while (1)
-	{
-		// 读取文件内容到缓冲区（一次读取最多2048个字节）
-		fRet = read(pReq->hFile, buf, sizeof(buf));
-		// printf("%d,%d\n",fRet,pReq->hFile);
-		// 文件不存在或者读取失败
-		if (fRet < 0)
+		// stat 结构体通常用于存储文件或文件系统的信息
+		// 可以使用 stat 函数来获取文件的信息，并将信息存储在 stat 结构体中
+		struct stat buf;
+		long length;
+		if (stat(pReq->szFileName, &buf) < 0)
 		{
-			// printf("!fRet\n");
-			static char szMsg[512];
-			sprintf(szMsg, "%s", HTTP_STATUS_SERVERERROR);
-			if ((nReq = BIO_write(io, szMsg, strlen(szMsg))) <= 0)
-			{
-				err_exit("BIO_write() error!\n");
-			}
-			BIO_flush(io);
-			break;
+			err_exit("Getting filesize error!!\r\n");
 		}
+		length = buf.st_size;
+		// 获取文件类型和Content-Type字段
+		char ContentType[50] = " ";
 
-		// 读取完文件
-		if (fRet == 0)
+		char *postfix = strstr(pReq->szFileName, ".");
+		strcpy(pReq->postfix, postfix);
+
+		GetContentType(pReq, (char *)ContentType);
+		GetContentType(pReq, (char *)ContentType);
+
+		GetContentType(pReq, (char *)ContentType);
+
+		sprintf((char *)Header, "HTTP/1.1 %s\r\nDate: %s\r\nServer: %s\r\nContent-Type: %s\r\nContent-Length: %d\r\n\r\n",
+				HTTP_STATUS_OK,
+				curTime,						// Date
+				"Villa Server 192.168.176.139", // Server"My Https Server"
+				ContentType,					// Content-Type
+				length);						// Content-length
+
+		if (BIO_write(io, Header, strlen(Header)) <= 0)
 		{
-			printf("complete \n");
-			break;
+			return false;
 		}
-		// 通过BIO接口发送文件内容
-		if (BIO_write(io, buf, fRet) <= 0)
+		BIO_flush(io); // 只是确保所有的IO操作都已经完成了
+		printf("SSLSendHeader successfully!\n");
+
+		// 对于HEAD请求来说，只需要发送头部即可，接下来处理GET请求的主体内容
+		if (pReq->nMethod == METHOD_GET)
 		{
-			if (!BIO_should_retry(io))
+			static char buf[2048];
+			DWORD dwRead;		// 读取文件的字节数
+			BOOL fRet;			// 读取文件的返回值
+			int flag = 1, nReq; // flag用于标记是否读取完文件，nReq用于记录BIO_write的返回值
+			while (1)
 			{
-				printf("BIO_write() error!\r\n");
-				break;
+				// 读取文件内容到缓冲区（一次读取最多2048个字节）
+				fRet = read(pReq->hFile, buf, sizeof(buf));
+				// printf("%d,%d\n",fRet,pReq->hFile);
+				// 文件不存在或者读取失败
+				if (fRet < 0)
+				{
+					// printf("!fRet\n");
+					static char szMsg[512];
+					sprintf(szMsg, "%s", HTTP_STATUS_SERVERERROR);
+					if ((nReq = BIO_write(io, szMsg, strlen(szMsg))) <= 0)
+					{
+						err_exit("BIO_write() error!\n");
+					}
+					BIO_flush(io);
+					break;
+				}
+
+				// 读取完文件
+				if (fRet == 0)
+				{
+					printf("complete \n");
+					break;
+				}
+				// 通过BIO接口发送文件内容
+				if (BIO_write(io, buf, fRet) <= 0)
+				{
+					if (!BIO_should_retry(io))
+					{
+						printf("BIO_write() error!\r\n");
+						break;
+					}
+				}
+				BIO_flush(io);
+				pReq->dwSend += fRet;
 			}
+			// 关闭文件
+			if (close(pReq->hFile) == 0)
+			{
+				pReq->hFile = -1;
+				return true;
+			}
+			else
+			{
+				err_exit("Closing file error!");
+			}
+		}
+	}
+	else if (pReq->nMethod == METHOD_POST)
+	{
+		json postData;
+		char *body = pReq->content;
+		char szSeps[] = "&=";
+		char *cpToken = strtok((char *)body, szSeps);
+		while (cpToken != NULL)
+		{
+			string key = cpToken;
+			cpToken = strtok(NULL, szSeps);
+			string value = cpToken;
+			postData[key] = value;
+			cpToken = strtok(NULL, szSeps);
+		}
+		printf("PostData: %s\n", postData.dump().c_str());
+		// POST请求
+		char ContentType[50] = "application/json";
+		long length = 0;
+		json res;
+		res["stataus"] = "success";
+		res["message"] = "Form submitted successfully";
+		string json_string = res.dump();
+		length = json_string.length();
+		sprintf((char *)Header, "HTTP/1.1 %s\r\nDate: %s\r\nServer: %s\r\nContent-Type: %s\r\nContent-Length: %d\r\n\r\n",
+				HTTP_STATUS_OK,
+				curTime,						// Date
+				"Villa Server 192.168.176.139", // Server"My Https Server"
+				ContentType,					// Content-Type
+				length);						// Content-length
+
+		if (BIO_write(io, Header, strlen(Header)) <= 0)
+		{
+			return false;
+		}
+		BIO_flush(io); // 只是确保所有的IO操作都已经完成了
+		printf("SSLSendHeader successfully!\n");
+
+		// 接下来，只要发送json字符串即可
+		if (BIO_write(io, json_string.c_str(), length) <= 0)
+		{
+			return false;
 		}
 		BIO_flush(io);
-		pReq->dwSend += fRet;
 	}
-	// 关闭文件
-	if (close(pReq->hFile) == 0)
+	else if (pReq->nMethod == METHOD_DELETE)
 	{
-		pReq->hFile = -1;
-		return true;
+		// DELETE请求
 	}
-	else
-	{
-		err_exit("Closing file error!");
-	}
+
+	return true;
 }
