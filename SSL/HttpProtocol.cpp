@@ -597,11 +597,10 @@ bool CHttpProtocol::GetContentType(PREQUEST pReq, LPSTR type)
 bool CHttpProtocol::SSLSendResponse(PREQUEST pReq, BIO *io)
 {
 	char Header[2048] = " ";
-	if (pReq->nMethod == METHOD_GET && !FileExist(pReq))
-	{
-		// 文件不存在
-		err_exit("The file requested doesn't exist!");
-	}
+	// HTTP状态码
+	char *STATUS = HTTP_STATUS_OK;
+	long length;
+	struct stat buf;
 
 	char curTime[50];
 	GetCurrentTime(curTime); // 反正就是获取到了字符串形式的当前时间
@@ -610,13 +609,22 @@ bool CHttpProtocol::SSLSendResponse(PREQUEST pReq, BIO *io)
 	{
 		// stat 结构体通常用于存储文件或文件系统的信息
 		// 可以使用 stat 函数来获取文件的信息，并将信息存储在 stat 结构体中
-		struct stat buf;
-		long length;
-		if (stat(pReq->szFileName, &buf) < 0)
+
+		if (FileExist(pReq))
 		{
-			err_exit("Getting filesize error!!\r\n");
+			if (stat(pReq->szFileName, &buf) < 0)
+			{
+				err_exit("Getting filesize error!!\r\n");
+			}
+			length = buf.st_size;
 		}
-		length = buf.st_size;
+		else
+		{
+			// 文件不存在
+			STATUS = HTTP_STATUS_NOTFOUND;
+			length = 0;
+		}
+
 		// 获取文件类型和Content-Type字段
 		char ContentType[50] = " ";
 
@@ -624,12 +632,9 @@ bool CHttpProtocol::SSLSendResponse(PREQUEST pReq, BIO *io)
 		strcpy(pReq->postfix, postfix);
 
 		GetContentType(pReq, (char *)ContentType);
-		GetContentType(pReq, (char *)ContentType);
-
-		GetContentType(pReq, (char *)ContentType);
 
 		sprintf((char *)Header, "HTTP/1.1 %s\r\nDate: %s\r\nServer: %s\r\nContent-Type: %s\r\nContent-Length: %d\r\n\r\n",
-				HTTP_STATUS_OK,
+				STATUS,
 				curTime,						// Date
 				"Villa Server 192.168.176.139", // Server"My Https Server"
 				ContentType,					// Content-Type
@@ -643,7 +648,7 @@ bool CHttpProtocol::SSLSendResponse(PREQUEST pReq, BIO *io)
 		printf("SSLSendHeader successfully!\n");
 
 		// 对于HEAD请求来说，只需要发送头部即可，接下来处理GET请求的主体内容
-		if (pReq->nMethod == METHOD_GET)
+		if (pReq->nMethod == METHOD_GET && strcmp(STATUS, HTTP_STATUS_OK) == 0)
 		{
 			static char buf[2048];
 			DWORD dwRead;		// 读取文件的字节数
@@ -722,7 +727,7 @@ bool CHttpProtocol::SSLSendResponse(PREQUEST pReq, BIO *io)
 		string json_string = res.dump();
 		length = json_string.length();
 		sprintf((char *)Header, "HTTP/1.1 %s\r\nDate: %s\r\nServer: %s\r\nContent-Type: %s\r\nContent-Length: %d\r\n\r\n",
-				HTTP_STATUS_OK,
+				STATUS,
 				curTime,						// Date
 				"Villa Server 192.168.176.139", // Server"My Https Server"
 				ContentType,					// Content-Type
@@ -744,7 +749,45 @@ bool CHttpProtocol::SSLSendResponse(PREQUEST pReq, BIO *io)
 	}
 	else if (pReq->nMethod == METHOD_DELETE)
 	{
+		char ContentType[50] = "text/plain";
+
+		if (FileExist(pReq))
+		{
+			if (stat(pReq->szFileName, &buf) < 0)
+			{
+				err_exit("Getting filesize error!!\r\n");
+			}
+			length = buf.st_size;
+			// 删除文件
+			if (remove(pReq->szFileName) == 0)
+			{
+				STATUS = HTTP_STATUS_OK;
+			}
+			else
+			{
+				STATUS = HTTP_STATUS_SERVERERROR;
+				length = 0;
+			}
+		}
+		else
+		{
+			// 文件不存在
+			STATUS = HTTP_STATUS_NOTFOUND;
+			length = 0;
+		}
 		// DELETE请求
+		sprintf((char *)Header, "HTTP/1.1 %s\r\nDate: %s\r\nServer: %s\r\nContent-Type: %s\r\nContent-Length: %d\r\n\r\n",
+				STATUS,
+				curTime,						// Date
+				"Villa Server 192.168.176.139", // Server"My Https Server"
+				ContentType,					// Content-Type
+				length);						// Content-length
+		if (BIO_write(io, Header, strlen(Header)) <= 0)
+		{
+			return false;
+		}
+		BIO_flush(io); // 只是确保所有的IO操作都已经完成了
+		printf("SSLSendHeader successfully!\n");
 	}
 
 	return true;

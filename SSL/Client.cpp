@@ -231,6 +231,35 @@ void POST_RE(SSL *ssl, BIO *io)
     printf("Received response:\n%s\n", response);
 }
 
+void DELETE_RE(SSL *ssl, BIO *io, char *filename)
+{
+    char request[MAXBUF] = {};
+
+    sprintf(request, "DELETE %s HTTP/1.1\r\n"
+                     "Host: 127.0.0.1\r\n"
+                     "Connection: close\r\n"
+                     "\r\n",
+            filename);
+    int request_len = strlen(request);
+    int bytes_sent = SSL_write(ssl, request, request_len);
+    if (bytes_sent <= 0)
+    {
+        printf("Failed to send DELETE request\n");
+        return;
+    }
+    printf("DELETE request sent successfully\n");
+
+    char response[MAXBUF + 1];
+    int bytes_received = SSL_read(ssl, response, MAXBUF);
+    if (bytes_received <= 0)
+    {
+        printf("Failed to receive response\n");
+        return;
+    }
+    response[bytes_received] = '\0';
+    printf("Received response:\n%s\n", response);
+}
+
 int main()
 {
     int sockfd, len;
@@ -304,6 +333,12 @@ int main()
         }
         else if (strcmp(message_type, "HEAD") == 0)
             HEAD_RE(ssl, io);
+        else if (strcmp(message_type, "DELETE") == 0)
+        {
+            printf("Enter filename to GET\n");
+            scanf("%s", filename);
+            DELETE_RE(ssl, io, filename);
+        }
         else
             printf("Invalid message type\n");
 
