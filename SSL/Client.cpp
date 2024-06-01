@@ -61,52 +61,53 @@ int password_cb(char *buf, int num, int rwflag, void *userdata)
     return (strlen(pass));
 }
 
-SSL_CTX *initialize_ctx()
-{
-    /* SSL 库初始化，参看 ssl-server.c 代码 */
-    SSL_library_init();
-    OpenSSL_add_all_algorithms();
-    SSL_load_error_strings();
-    SSL_CTX *ctx = SSL_CTX_new(TLSv1_2_client_method());
-    if (ctx == NULL)
-    {
-        ERR_print_errors_fp(stdout);
-        exit(1);
-    }
-    // 双向验证
-    // SSL_VERIFY_PEER---要求对证书进行认证，没有证书也会放行
-    // SSL_VERIFY_FAIL_IF_NO_PEER_CERT---要求客户端需要提供证书，但验证发现单独使用没有证书也会放行
-    SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
-    // 设置信任根证书
-    if (SSL_CTX_load_verify_locations(ctx, ROOTCERTPEM, NULL) <= 0)
-    {
-        ERR_print_errors_fp(stdout);
-        exit(1);
-    }
+// 双重认证
+// SSL_CTX *initialize_ctx()
+// {
+//     /* SSL 库初始化，参看 ssl-server.c 代码 */
+//     SSL_library_init();
+//     OpenSSL_add_all_algorithms();
+//     SSL_load_error_strings();
+//     SSL_CTX *ctx = SSL_CTX_new(TLSv1_2_client_method());
+//     if (ctx == NULL)
+//     {
+//         ERR_print_errors_fp(stdout);
+//         exit(1);
+//     }
+//     // 双向验证
+//     // SSL_VERIFY_PEER---要求对证书进行认证，没有证书也会放行
+//     // SSL_VERIFY_FAIL_IF_NO_PEER_CERT---要求客户端需要提供证书，但验证发现单独使用没有证书也会放行
+//     SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
+//     // 设置信任根证书
+//     if (SSL_CTX_load_verify_locations(ctx, ROOTCERTPEM, NULL) <= 0)
+//     {
+//         ERR_print_errors_fp(stdout);
+//         exit(1);
+//     }
 
-    SSL_CTX_set_default_passwd_cb(ctx, password_cb);
+//     SSL_CTX_set_default_passwd_cb(ctx, password_cb);
 
-    /* 载入用户的数字证书， 此证书用来发送给客户端。 证书里包含有公钥 */
-    if (SSL_CTX_use_certificate_file(ctx, CLIENTPEM, SSL_FILETYPE_PEM) <= 0)
-    {
-        ERR_print_errors_fp(stdout);
-        exit(1);
-    }
-    /* 载入用户私钥 */
-    if (SSL_CTX_use_PrivateKey_file(ctx, CLIENTKEYPEM, SSL_FILETYPE_PEM) <= 0)
-    {
-        ERR_print_errors_fp(stdout);
-        exit(1);
-    }
-    /* 检查用户私钥是否正确 */
-    if (!SSL_CTX_check_private_key(ctx))
-    {
-        ERR_print_errors_fp(stdout);
-        exit(1);
-    }
-    printf("SSL_CTX initialized\n");
-    return ctx;
-}
+//     /* 载入用户的数字证书， 此证书用来发送给客户端。 证书里包含有公钥 */
+//     if (SSL_CTX_use_certificate_file(ctx, CLIENTPEM, SSL_FILETYPE_PEM) <= 0)
+//     {
+//         ERR_print_errors_fp(stdout);
+//         exit(1);
+//     }
+//     /* 载入用户私钥 */
+//     if (SSL_CTX_use_PrivateKey_file(ctx, CLIENTKEYPEM, SSL_FILETYPE_PEM) <= 0)
+//     {
+//         ERR_print_errors_fp(stdout);
+//         exit(1);
+//     }
+//     /* 检查用户私钥是否正确 */
+//     if (!SSL_CTX_check_private_key(ctx))
+//     {
+//         ERR_print_errors_fp(stdout);
+//         exit(1);
+//     }
+//     printf("SSL_CTX initialized\n");
+//     return ctx;
+// }
 
 void HEAD_RE(SSL *ssl, BIO *io)
 {

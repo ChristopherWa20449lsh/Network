@@ -7,19 +7,40 @@
     </head>
     <link rel="icon" type="image/x-icon" href="favicon.ico" />
     <body>
-        <h1>我的第一个HTML页面</h1>
-        <p>我的第一个段落。</p>
-        <form action="http://foo.com" method="post">
-            <label for="name">Name:</label>
+        <h1>简单表单提交示例</h1>
+
+        <form id="myForm">
+            <label for="name">姓名:</label>
             <input type="text" id="name" name="name" /><br /><br />
-
-            <label for="email">Email:</label>
+            <label for="email">邮箱:</label>
             <input type="email" id="email" name="email" /><br /><br />
-
-            <label for="message">Message:</label><br />
-            <textarea id="message" name="message" rows="4" cols="50"></textarea><br /><br />
-
-            <input type="submit" value="Submit" />
+            <input type="submit" value="提交" />
         </form>
+
+        <script>
+            document.getElementById('myForm').addEventListener('submit', function (event) {
+                event.preventDefault(); // 阻止表单默认提交行为
+                // 获取表单数据
+                var formData = new FormData(this);
+                var name = formData.get('name');
+                var email = formData.get('email');
+
+                const url = 'https://127.0.0.1:8000/post';
+                const data = { name: name, email: email };
+
+                $.ajax({
+                    type: 'POST',
+                    url: url,
+                    data: data,
+                    success: function (res) {
+                        console.log(res);
+                    },
+                    error: function (res) {
+                        console.log(res);
+                    },
+                    dataType: 'json',
+                });
+            });
+        </script>
     </body>
 </html>
