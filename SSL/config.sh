@@ -1,3 +1,4 @@
+cd ~
 wget http://www.openssl.org/source/openssl-1.0.1c.tar.gz
 tar -zxvf openssl-1.0.1c.tar.gz
 cd openssl-1.0.1c
@@ -5,6 +6,7 @@ cd openssl-1.0.1c
 make
 sudo make install
 
+cd ~
 wget https://www.openssl.org/source/openssl-1.1.1f.tar.gz
 tar -zxvf openssl-1.1.1f.tar.gz
 cd openssl-1.1.1f
