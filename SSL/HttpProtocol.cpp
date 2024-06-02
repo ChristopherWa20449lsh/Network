@@ -17,7 +17,7 @@ CHttpProtocol::CHttpProtocol(void)
 {
 	CreateTypeMap();
 	printf("初始化SSL_CTX对象... \n");
-	printf("OpenSSL version: %s\n", OpenSSL_version(OPENSSL_VERSION));
+	printf("OpenSSL version: %s %s\n", OPENSSL_VERSION_TEXT, OpenSSL_version(OPENSSL_DIR));
 	bio_err = 0;
 	m_strRootDir = "./WebServer"; // web根目录
 	ErrorMsg = "";
