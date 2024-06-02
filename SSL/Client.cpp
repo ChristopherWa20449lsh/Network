@@ -145,10 +145,11 @@ void GET_RE(SSL *ssl, BIO *io, char *filename)
     char request[MAXBUF] = {};
 
     sprintf(request, "GET %s HTTP/1.1\r\n"
-                     "Host: 127.0.0.1\r\n"
+                     "Accept: image/gif, image/x-xbitmap, image/jpeg, image/pjpeg, application/vnd.ms-excel, application/vnd.ms-powerpoint\r\n"
+                     "Host: %s\r\n"
                      "Connection: close\r\n"
                      "\r\n",
-            filename);
+            filename, SERVER_IP);
 
     if (BIO_write(io, request, strlen(request)) <= 0)
     {
@@ -242,10 +243,10 @@ void DELETE_RE(SSL *ssl, BIO *io, char *filename)
     char request[MAXBUF] = {};
 
     sprintf(request, "DELETE %s HTTP/1.1\r\n"
-                     "Host: 127.0.0.1\r\n"
+                     "Host: %s\r\n"
                      "Connection: close\r\n"
                      "\r\n",
-            filename);
+            filename, SERVER_IP);
     int request_len = strlen(request);
     int bytes_sent = SSL_write(ssl, request, request_len);
     if (bytes_sent <= 0)
