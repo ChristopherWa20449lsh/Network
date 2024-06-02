@@ -3,10 +3,13 @@ CC = g++
 
 OPENSSL_INCLUDE_MAC = /opt/homebrew/opt/openssl@1.1/include
 OPENSSL_LIB_MAC = /opt/homebrew/opt/openssl@1.1/lib
+OPENSSL_MAC = /opt/homebrew/opt/openssl@1.1/bin/openssl
 OPENSSL_INCLUDE_LINUX_NORMAL = /usr/local/openssl-1.1.1f/ssl/include
 OPENSSL_LIB_LINUX_NORMAL = /usr/local/openssl-1.1.1f/ssl/lib
+OPENSSL_LINUX_NORMAL = /usr/local/openssl-1.1.1f/ssl/bin/openssl
 OPENSSL_INCLUDE_LINUX_HEARTBLEED = /usr/local/openssl-1.0.1c/ssl/include
 OPENSSL_LIB_LINUX_HEARTBLEED = /usr/local/openssl-1.0.1c/ssl/lib
+OPENSSL_LINUX_HEARTBLEED = /usr/local/openssl-1.0.1c/ssl/bin/openssl
 
 CFLAGS=-g -I$(OPENSSL_INCLUDE) -Wall
 LD=-L$(OPENSSL_LIB) -lssl -lcrypto -ldl -lpthread
@@ -28,18 +31,18 @@ server: common.o server.o HttpProtocol.o
 client: client.cpp
 	$(CC) $(CFLAGS) client.cpp -o client $(LD)
 
-mac: Key
-	OPENSSL_INCLUDE=$(OPENSSL_INCLUDE_MAC) OPENSSL_LIB=$(OPENSSL_LIB_MAC) $(MAKE) server client
+mac:
+	OPENSSL_INCLUDE=$(OPENSSL_INCLUDE_MAC) OPENSSL_LIB=$(OPENSSL_LIB_MAC) OPENSSL=$(OPENSSL_MAC) $(MAKE) Key server client
 
-normal: Key
-	OPENSSL_INCLUDE=$(OPENSSL_INCLUDE_LINUX_NORMAL) OPENSSL_LIB=$(OPENSSL_LIB_LINUX_NORMAL) $(MAKE) server client
+normal:
+	OPENSSL_INCLUDE=$(OPENSSL_INCLUDE_LINUX_NORMAL) OPENSSL_LIB=$(OPENSSL_LIB_LINUX_NORMAL) OPENSSL=$(OPENSSL_LINUX_NORMAL) $(MAKE) Key server client
 
-heartbleed: Key
-	OPENSSL_INCLUDE=$(OPENSSL_INCLUDE_LINUX_HEARTBLEED) OPENSSL_LIB=$(OPENSSL_LIB_LINUX_HEARTBLEED) $(MAKE) server client
+heartbleed:
+	OPENSSL_INCLUDE=$(OPENSSL_INCLUDE_LINUX_HEARTBLEED) OPENSSL_LIB=$(OPENSSL_LIB_LINUX_HEARTBLEED) OPENSSL=$(OPENSSL_LINUX_HEARTBLEED) $(MAKE) Key server client
 
 Key:
 	chmod +x keygen.sh
-	./keygen.sh
+	./keygen.sh $(OPENSSL)
 
 clean:
 	rm -rf client.dSYM
