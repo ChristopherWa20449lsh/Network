@@ -55,15 +55,18 @@ int main()
     */
     SSL *ssl;
 
-    SSL_library_init();                        // 初始化 SSL 库
-    OpenSSL_add_all_algorithms();              // 加载所有算法
-    SSL_load_error_strings();                  // 加载所有错误信息
-    ctx = SSL_CTX_new(SSLv23_client_method()); // 创建 SSL_CTX 对象(选择会话协议，比如这里选择SSLv2/v3)
+    SSL_library_init();                         // 初始化 SSL 库
+    OpenSSL_add_all_algorithms();               // 加载所有算法
+    SSL_load_error_strings();                   // 加载所有错误信息
+    ctx = SSL_CTX_new(TLSv1_1_client_method()); // 创建 SSL_CTX 对象(选择会话协议，比如这里选择SSLv2/v3)
     if (SSL_CTX_set_cipher_list(ctx, "HIGH:!aNULL:!kRSA:!PSK:!SRP:!MD5:!RC4") != 1)
     {
         ERR_print_errors_fp(stderr);
         exit(1);
     }
+
+    // 启用心跳机制
+    SSL_CTX_set_options(ctx, SSL_OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION);
 
     /* 创建一个 socket 用于 tcp 通信 */
     if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)

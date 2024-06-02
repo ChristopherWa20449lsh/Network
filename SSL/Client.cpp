@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <string>
 #include <errno.h>
 #include <sys/socket.h>
 #include <resolv.h>
@@ -7,6 +8,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <iostream>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 
@@ -17,10 +19,13 @@
 #define CLIENTPEM "client.crt"
 #define CLIENTKEYPEM "client_rsa_private.pem"
 
-#define SERVER_IP "127.0.0.1"
-#define SERVER_PORT 8000
 #define MAXBUF 1024
 #define PASSWORD "client"
+
+using namespace std;
+
+char *SERVER_IP = "127.0.0.1";
+int SERVER_PORT = 8000;
 
 void ShowCerts(SSL *ssl)
 {
@@ -261,8 +266,22 @@ void DELETE_RE(SSL *ssl, BIO *io, char *filename)
     printf("Received response:\n%s\n", response);
 }
 
-int main()
+int main(int argc, char *argv[])
 {
+
+    if (argc >= 2)
+    {
+        SERVER_IP = argv[1];
+    }
+
+    if (argc >= 3)
+    {
+        SERVER_PORT = stoi(argv[2]);
+    }
+
+    cout << "Server IP: " << SERVER_IP << endl;
+    cout << "Server Port: " << SERVER_PORT << endl;
+
     int sockfd, len;
     struct sockaddr_in dest;
     SSL_CTX *ctx;

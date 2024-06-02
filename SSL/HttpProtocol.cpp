@@ -239,10 +239,21 @@ int CHttpProtocol::TcpListen()
 	sin.sin_port = htons(HTTPSPORT);		 // 8000端口
 
 	// ::bind(sock, (struct sockaddr *)&sin, sizeof(sin));
+	// 设置端口复用
+	int reuse = 1;
+	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0)
+	{
+		err_exit("setsockopt(SO_REUSEADDR) failed");
+	}
+	if (::bind(sock, (struct sockaddr *)&sin, sizeof(sin)) < 0)
+	{
+
+		err_exit("Couldn't bind");
+	}
 
 	// 使用全局bind而不是std::下的bind函数！！！！！！！！！
-	if (::bind(sock, (struct sockaddr *)&sin, sizeof(sin)) < 0) // 绑定ip和端口
-		err_exit("Couldn't bind");
+	// if (::bind(sock, (struct sockaddr *)&sin, sizeof(sin)) < 0) // 绑定ip和端口
+	// err_exit("Couldn't bind");
 	// listen函数本身并不处理连接请求，它只是设置套接字为监听模式，并指定了最大的连接请求队列长度。当客户端向服务器发送连接请求时，这些请求会被放入一个队列中，队列的最大长度由listen函数的第二个参数MAXLINK指定。
 	// 真正接受并处理这些连接请求的是accept函数。当accept函数被调用时，它会从队列中取出一个连接请求来处理，如果队列为空（即没有客户端发送连接请求），accept函数会阻塞，直到有新的连接请求到来。
 	if (-1 == listen(sock, MAXLINK))
@@ -335,7 +346,7 @@ void *CHttpProtocol::ListenThread(LPVOID param)
 			printf("accept error(%d): %s\n", errno, strerror(errno));
 			break;
 		}
-		printf("ip: %s\n", inet_ntoa(SockAddr.sin_addr)); // 输出客户端连接ip
+		printf("client ip: %s\nclient port: %d\n", inet_ntoa(SockAddr.sin_addr), ntohs(SockAddr.sin_port)); // 输出客户端连接ip
 
 		if (socketClient == INVALID_SOCKET)
 		{
@@ -396,6 +407,8 @@ void *CHttpProtocol::ClientThread(LPVOID param)
 
 	// 开始获取客户端请求数据
 	printf("****************\r\n");
+
+	// Rest of the code goes here...
 	if (!pHttpProtocol->SSLRecvRequest(ssl, io, buf, sizeof(buf)))
 	{
 		pHttpProtocol->err_exit("Receiving SSLRequest error!! \r\n");
