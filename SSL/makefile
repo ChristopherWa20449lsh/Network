@@ -12,7 +12,7 @@ OPENSSL_LIB_LINUX_HEARTBLEED = /usr/local/openssl-1.0.1c/lib
 # OPENSSL_LINUX_HEARTBLEED = /usr/local/openssl-1.0.1c/bin/openssl
 
 CFLAGS=-g -I$(OPENSSL_INCLUDE) -Wall
-LD=-L$(OPENSSL_LIB) -lssl -lcrypto -ldl -lpthread
+LD=-L$(OPENSSL_LIB) -lssl -lcrypto -ldl -lpthread -lsqlite3
 
 .PHONY: clean Key server client
 

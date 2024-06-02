@@ -1,5 +1,6 @@
 #include "common.h"
 #include <sys/stat.h>
+#include <sqlite3.h>
 #include "HttpProtocol.h"
 
 #include "json.hpp"
@@ -253,7 +254,7 @@ int CHttpProtocol::TcpListen()
 		err_exit("Couldn't bind");
 	}
 
-	// 使用全局bind而不是std::下的bind函数！！！！！！！！！
+	// 使用全局bind而不是下的bind函数！！！！！！！！！
 	// if (::bind(sock, (struct sockaddr *)&sin, sizeof(sin)) < 0) // 绑定ip和端口
 	// err_exit("Couldn't bind");
 	// listen函数本身并不处理连接请求，它只是设置套接字为监听模式，并指定了最大的连接请求队列长度。当客户端向服务器发送连接请求时，这些请求会被放入一个队列中，队列的最大长度由listen函数的第二个参数MAXLINK指定。
@@ -734,13 +735,84 @@ bool CHttpProtocol::SSLSendResponse(PREQUEST pReq, BIO *io)
 			postData[key] = value;
 			cpToken = strtok(NULL, szSeps);
 		}
+
+		char *status, *message;
+
+		// 获取到了注册数据，需要将其写入数据库中
+		if (strstr(pReq->szFileName, "signup") != NULL)
+		{
+			// Connect to the database
+			sqlite3 *db;
+			int rc = sqlite3_open("database.db", &db);
+			if (rc != SQLITE_OK)
+			{
+				printf("Cannot open database: %s\n", sqlite3_errmsg(db));
+				return false;
+			}
+
+			// Create the table if it doesn't exist
+			const char *createTableQuery = "CREATE TABLE IF NOT EXISTS postData ("
+										   "name TEXT PRIMARY KEY,"
+										   "email TEXT,"
+										   "password TEXT);";
+			rc = sqlite3_exec(db, createTableQuery, 0, 0, 0);
+			if (rc != SQLITE_OK)
+			{
+				printf("Cannot create table: %s\n", sqlite3_errmsg(db));
+				sqlite3_close(db);
+				return false;
+			}
+
+			// Insert the post data into the table
+			json::iterator it;
+			string key[3];
+			string value[3];
+			int i;
+			for (i = 0, it = postData.begin(); it != postData.end(); ++it, i++)
+			{
+				key[i] = it.key();
+				value[i] = it.value();
+			}
+			string insertQuery = "INSERT INTO postData ('" + key[0] + "', '" + key[1] + "', '" + key[2] + "') VALUES ('" + value[0] + "', '" + value[1] + "', '" + value[2] + "');";
+			rc = sqlite3_exec(db, insertQuery.c_str(), 0, 0, 0);
+			switch (rc)
+			{
+			case SQLITE_OK:
+				status = "success";
+				message = "User registered successfully";
+				break;
+			case SQLITE_CONSTRAINT:
+				status = "error";
+				message = "User already exists";
+				break;
+			default:
+				status = "error";
+				message = "Internal server error";
+				break;
+			}
+			if (rc != SQLITE_OK)
+			{
+				STATUS = HTTP_STATUS_NOTFOUND;
+				printf("Cannot insert data: %s\n", sqlite3_errmsg(db));
+			}
+			// Close the database connection
+			sqlite3_close(db);
+		}
+		// 获取到了登录数据，需要验证登录
+		else if (strstr(pReq->szFileName, "login") != NULL)
+		{
+		}
+		else
+		{
+		}
+
 		printf("PostData: %s\n", postData.dump().c_str());
 		// POST请求
 		char ContentType[50] = "application/json";
 		long length = 0;
 		json res;
-		res["stataus"] = "success";
-		res["message"] = "Form submitted successfully";
+		res["status"] = status;
+		res["message"] = message;
 		string json_string = res.dump();
 		length = json_string.length();
 		sprintf((char *)Header, "HTTP/1.1 %s\r\nDate: %s\r\nServer: %s\r\nContent-Type: %s\r\nContent-Length: %d\r\n\r\n",
