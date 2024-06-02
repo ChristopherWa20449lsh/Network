@@ -12,6 +12,10 @@
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 
+#include "json.hpp"
+
+using json = nlohmann::json;
+
 #define ROOTCERTPEM "ca.crt"
 #define ROOTKEYPEM "ca_rsa_private.pem"
 #define SERVERPEM "server.crt"
@@ -213,20 +217,35 @@ void GET_RE(SSL *ssl, BIO *io, char *filename)
     fclose(file);
 }
 
-void POST_RE(SSL *ssl, BIO *io)
+void POST_RE(SSL *ssl, BIO *io, char *action)
 {
-    const char *request = "POST / HTTP/1.1\r\n"
-                          "Host: example.com\r\n"
-                          "Connection: close\r\n"
-                          "\r\n";
-    int request_len = strlen(request);
-    int bytes_sent = SSL_write(ssl, request, request_len);
+    char request[MAXBUF] = {};
+    char postData[MAXBUF] = {};
+    int bytes_sent;
+    printf("Please input your name,email,password\n");
+    char name[MAXBUF], email[MAXBUF], password[MAXBUF];
+    scanf("%s %s %s", name, email, password);
+
+    sprintf(postData, "name=%s&email=%s&password=%s", name, email, password);
+
+    printf("POST data: %s\n", postData);
+
+    sprintf(request, "POST /post/%s HTTP/1.1\r\n"
+                     "Host: %s\r\n"
+                     "Content-Length: %d\r\n"
+                     "Connection: close\r\n"
+                     "\r\n",
+            action, SERVER_IP, strlen(postData));
+
+    strcat(request, postData);
+
+    bytes_sent = SSL_write(ssl, request, strlen(request));
+
     if (bytes_sent <= 0)
     {
-        printf("Failed to send POST request\n");
+        printf("Failed to send POST data\n");
         return;
     }
-    printf("POST request sent successfully\n");
 
     char response[MAXBUF + 1];
     int bytes_received = SSL_read(ssl, response, MAXBUF);
@@ -362,6 +381,7 @@ int main(int argc, char *argv[])
 
         char message_type[10];
         char filename[100];
+        char action[100];
         scanf("%s", message_type);
 
         if (strcmp(message_type, "GET") == 0)
@@ -372,6 +392,12 @@ int main(int argc, char *argv[])
         }
         else if (strcmp(message_type, "HEAD") == 0)
             HEAD_RE(ssl, io);
+        else if (strcmp(message_type, "POST") == 0)
+        {
+            printf("Enter action to GET: <signup|login>\n");
+            scanf("%s", action);
+            POST_RE(ssl, io, action);
+        }
         else if (strcmp(message_type, "DELETE") == 0)
         {
             printf("Enter filename to GET\n");

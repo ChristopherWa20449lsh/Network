@@ -29,7 +29,7 @@ server: common.o server.o HttpProtocol.o
 	$(CC) $(CFLAGS) common.o server.o HttpProtocol.o -o server $(LD)
 
 client: client.cpp
-	$(CC) $(CFLAGS) client.cpp -o client $(LD)
+	$(CC) $(CFLAGS) -std=c++11 client.cpp -o client $(LD)
 
 mac:
 	OPENSSL_INCLUDE=$(OPENSSL_INCLUDE_MAC) OPENSSL_LIB=$(OPENSSL_LIB_MAC) $(MAKE) Key server client
