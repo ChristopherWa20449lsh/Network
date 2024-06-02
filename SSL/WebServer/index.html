@@ -40,7 +40,7 @@
             let email = formData.get('email');
             let password = formData.get('pswd');
 
-            const url = 'https://127.0.0.1:8000/post/signup';
+            const url = 'https://192.168.56.135:8000/post/signup';
             const data = { name: name, email: email, password: password };
 
             console.log(data);
@@ -68,7 +68,7 @@
             let email = formData.get('email');
             let password = formData.get('pswd');
 
-            const url = 'https://127.0.0.1:8000/post/login';
+            const url = 'https://192.168.56.135:8000/post/login';
             const data = { email: email, password: password };
 
             $.ajax({

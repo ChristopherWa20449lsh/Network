@@ -815,7 +815,7 @@ bool CHttpProtocol::SSLSendResponse(PREQUEST pReq, BIO *io)
 		res["message"] = message;
 		string json_string = res.dump();
 		length = json_string.length();
-		sprintf((char *)Header, "HTTP/1.1 %s\r\nDate: %s\r\nServer: %s\r\nContent-Type: %s\r\nContent-Length: %d\r\n\r\n",
+		sprintf((char *)Header, "HTTP/1.1 %s\r\nDate: %s\r\nServer: %s\r\nContent-Type: %s\r\nContent-Length: %d\r\nAccess-Control-Allow-Origin: *\r\n\r\n",
 				STATUS,
 				curTime,						// Date
 				"Villa Server 192.168.176.139", // Server"My Https Server"
