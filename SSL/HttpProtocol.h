@@ -11,6 +11,7 @@ public:
 	SOCKET m_listenSocket;				 // 创建监听套接字
 	map<string, const char *> m_typeMap; // 保存content-type和文件后缀的对应关系map
 	HANDLE m_hExit;
+	const SSL_METHOD *meth;
 
 	char *m_strRootDir; // web的根目录
 	UINT m_nPort;		// http server的端口号

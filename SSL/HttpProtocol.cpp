@@ -55,7 +55,7 @@ char *CHttpProtocol::initialize_ctx()
 	}
 
 	// 创建SSL_CTX对象
-	ctx = SSL_CTX_new(TLSv1_2_server_method());
+	ctx = SSL_CTX_new(meth);
 
 	// 双向验证
 	// SSL_VERIFY_PEER---要求对证书进行认证，没有证书也会放行

@@ -26,6 +26,7 @@ using namespace std;
 
 char *SERVER_IP = "127.0.0.1";
 int SERVER_PORT = 8000;
+const SSL_METHOD *meth = TLSv1_2_client_method();
 
 void ShowCerts(SSL *ssl)
 {
@@ -278,6 +279,22 @@ int main(int argc, char *argv[])
     if (argc >= 3)
     {
         SERVER_PORT = stoi(argv[2]);
+    }
+
+    if (argc >= 4)
+    {
+        switch (atoi(argv[3]))
+        {
+        case 1:
+            meth = TLSv1_1_client_method();
+            break;
+        case 2:
+            meth = TLSv1_2_client_method();
+            break;
+        default:
+            meth = TLSv1_2_client_method();
+            break;
+        }
     }
 
     cout << "Server IP: " << SERVER_IP << endl;

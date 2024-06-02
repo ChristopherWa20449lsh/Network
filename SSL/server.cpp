@@ -1,10 +1,26 @@
 #include "common.h"
 #include "HttpProtocol.h"
 
-int main()
+int main(int argc, char *argv[])
 {
-	CHttpProtocol MyHttpObj;  // 创建一个CHttpProtocol对象
+	CHttpProtocol MyHttpObj; // 创建一个CHttpProtocol对象
+	if (argc == 2)
+	{
+		switch (atoi(argv[1]))
+		{
+		case 1:
+			MyHttpObj.meth = TLSv1_1_server_method();
+			break;
+		case 2:
+			MyHttpObj.meth = TLSv1_2_server_method();
+			break;
+		default:
+			MyHttpObj.meth = TLSv1_2_server_method();
+			break;
+		}
+	}
 	MyHttpObj.StartHttpSrv(); // 调用StartHttpSrv()
+
 	while (true)
 	{
 	}
