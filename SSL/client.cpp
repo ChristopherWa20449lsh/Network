@@ -297,6 +297,7 @@ int main(int argc, char *argv[])
         }
     }
 
+    cout << "SSL Version: " << (meth == TLSv1_1_client_method() ? "TLSv1.1" : "TLSv1.2") << endl;
     cout << "Server IP: " << SERVER_IP << endl;
     cout << "Server Port: " << SERVER_PORT << endl;
 
@@ -311,7 +312,7 @@ int main(int argc, char *argv[])
     OpenSSL_add_all_algorithms();
     SSL_load_error_strings();
     // ctx = initialize_ctx();
-    ctx = SSL_CTX_new(TLSv1_2_client_method());
+    ctx = SSL_CTX_new(meth);
 
     /* 初始化服务器端（对方）的地址和端口信息 */
     bzero(&dest, sizeof(dest));

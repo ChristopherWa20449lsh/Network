@@ -3,22 +3,18 @@
 
 int main(int argc, char *argv[])
 {
-	CHttpProtocol MyHttpObj; // 创建一个CHttpProtocol对象
-	if (argc == 2)
+	int v;
+	if (argc != 2)
 	{
-		switch (atoi(argv[1]))
-		{
-		case 1:
-			MyHttpObj.meth = TLSv1_1_server_method();
-			break;
-		case 2:
-			MyHttpObj.meth = TLSv1_2_server_method();
-			break;
-		default:
-			MyHttpObj.meth = TLSv1_2_server_method();
-			break;
-		}
+		printf("Usage: %s <1|2> to choose the TLS version,setting TLSv1.2 as default\n", argv[0]);
+		v = 2;
 	}
+	else
+	{
+		v = atoi(argv[1]);
+	}
+	CHttpProtocol MyHttpObj(v); // 创建一个CHttpProtocol对象
+	printf("Setting SSL Version to %s\n", (v == 1) ? "TLSv1.1" : "TLSv1.2");
 	MyHttpObj.StartHttpSrv(); // 调用StartHttpSrv()
 
 	while (true)

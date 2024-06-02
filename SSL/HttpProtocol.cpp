@@ -13,9 +13,10 @@ using namespace std;
 char *CHttpProtocol::pass = PASSWORD;
 
 // 构造函数，初始化SSL_CTX对象
-CHttpProtocol::CHttpProtocol(void)
+CHttpProtocol::CHttpProtocol(int v)
 {
 	CreateTypeMap();
+	meth = (v == 1) ? TLSv1_1_server_method() : TLSv1_2_server_method();
 	printf("初始化SSL_CTX对象... \n");
 	printf("OpenSSL version: %s %s\n", OPENSSL_VERSION_TEXT, OpenSSL_version(OPENSSL_DIR));
 	bio_err = 0;

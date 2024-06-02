@@ -24,7 +24,7 @@ public:
 	static int password_cb(char *buf, int num, int rwflag, void *userdata);
 
 public:
-	CHttpProtocol(void);
+	CHttpProtocol(int v);
 	int TcpListen();
 	void err_exit(char *str);
 
