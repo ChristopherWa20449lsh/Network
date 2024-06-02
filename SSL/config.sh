@@ -1,3 +1,7 @@
+sudo apt install sqlite3
+sudo apt install libsqlite3-dev # for sqlite3.h(开放给高级语言的接口)
+sudo apt install tmux
+
 cd ~
 wget http://www.openssl.org/source/openssl-1.0.1c.tar.gz
 tar -zxvf openssl-1.0.1c.tar.gz
