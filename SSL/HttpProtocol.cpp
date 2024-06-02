@@ -18,7 +18,7 @@ CHttpProtocol::CHttpProtocol(int v)
 	CreateTypeMap();
 	meth = (v == 1) ? TLSv1_1_server_method() : TLSv1_2_server_method();
 	printf("初始化SSL_CTX对象... \n");
-	printf("OpenSSL version: %s %s\n", OPENSSL_VERSION_TEXT, OpenSSL_version(OPENSSL_DIR));
+	printf("OpenSSL version: %s\n", OPENSSL_VERSION_TEXT);
 	bio_err = 0;
 	m_strRootDir = "./WebServer"; // web根目录
 	ErrorMsg = "";
@@ -260,7 +260,6 @@ int CHttpProtocol::TcpListen()
 	// 真正接受并处理这些连接请求的是accept函数。当accept函数被调用时，它会从队列中取出一个连接请求来处理，如果队列为空（即没有客户端发送连接请求），accept函数会阻塞，直到有新的连接请求到来。
 	if (-1 == listen(sock, MAXLINK))
 		err_exit("TcpListen error!");
-	printf("TcpListen Ok\n");
 
 	return sock;
 }
@@ -393,7 +392,10 @@ void *CHttpProtocol::ClientThread(LPVOID param)
 
 	if (nRet <= 0)
 	{
-		pHttpProtocol->err_exit("SSL_accept()error! \r\n");
+		printf("SSL_accept()error! \r\n");
+		delete pReq;
+		SSL_free(ssl);
+		return NULL;
 	}
 	else
 	{
