@@ -183,7 +183,7 @@ def main():
     print 'Connecting...'
 
     # connect server
-    s.connect((args[0], opts.port))
+    # s.connect((args[0], opts.port))
 
     if opts.starttls != '':
       print 'Sending STARTTLS Protocol Command...'
