@@ -179,9 +179,7 @@ def main():
 
     # create socket
     # s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-    print 'Connecting...'
-
+    
     # connect server
     # s.connect((args[0], opts.port))
 
