@@ -244,7 +244,9 @@ def main():
     sys.stdout.flush()
     # start sending heartbeat request
     s.send(hb)
-    hit_hb(s, hb)
+    while True:
+        time.sleep(5)
+        hit_hb(s, hb)
 
 if __name__ == '__main__':
     main()
