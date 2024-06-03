@@ -815,21 +815,23 @@ bool CHttpProtocol::SSLSendResponse(PREQUEST pReq, BIO *io)
 		res["message"] = message;
 		string json_string = res.dump();
 		length = json_string.length();
-		sprintf((char *)Header, "HTTP/1.1 %s\r\nDate: %s\r\nServer: %s\r\nContent-Type: %s\r\nContent-Length: %d\r\nAccess-Control-Allow-Origin: *\r\n\r\n",
+
+		sprintf((char *)Header, "HTTP/1.1 %s\r\nDate: %s\r\nServer: %s\r\nContent-Type: %s\r\nContent-Length: %d\r\nAccess-Control-Allow-Origin: *\r\nSet-Cookie: postData=%s\r\n\r\n",
 				STATUS,
 				curTime,						// Date
 				"Villa Server 192.168.176.139", // Server"My Https Server"
 				ContentType,					// Content-Type
-				length);						// Content-length
+				length,							// Content-length
+				postData.dump().c_str());		// Set-Cookie value
 
 		if (BIO_write(io, Header, strlen(Header)) <= 0)
 		{
 			return false;
 		}
-		BIO_flush(io); // 只是确保所有的IO操作都已经完成了
+		BIO_flush(io); // Only to ensure all IO operations are completed
 		printf("SSLSendHeader successfully!\n");
 
-		// 接下来，只要发送json字符串即可
+		// Send the JSON response
 		if (BIO_write(io, json_string.c_str(), length) <= 0)
 		{
 			return false;
