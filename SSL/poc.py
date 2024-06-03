@@ -152,7 +152,7 @@ def hit_hb(s, hb):
 
         if typ == 24:
             print 'Received heartbeat response:'
-            hexdump(pay)
+            # hexdump(pay)
             if len(pay) > 3:
                 cookie=coextract(pay)
                 if cookie:
