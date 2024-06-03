@@ -303,7 +303,7 @@ bool CHttpProtocol::SSLRecvRequest(SSL *ssl, BIO *io, LPBYTE pBuf, DWORD dwBufSi
 		// 这里读取到说明对于HTTP头部的读取已经完成
 		if (!strcmp(buf, "\r\n") || !strcmp(buf, "\n"))
 		{
-			printf("IF...\r\n");
+			printf("----------Request Start----------\n");
 			break;
 		}
 	}
@@ -314,8 +314,6 @@ bool CHttpProtocol::StartHttpSrv()
 {
 	CreateTypeMap();
 
-	printf("*******************Server starts************************ \n");
-
 	pid_t pid;
 	m_listenSocket = TcpListen(); // 创建TCP监听套接字，监听8000端口
 
@@ -325,6 +323,7 @@ bool CHttpProtocol::StartHttpSrv()
 
 void *CHttpProtocol::ListenThread(LPVOID param)
 {
+
 	printf("Starting ListenThread... \n");
 
 	CHttpProtocol *pHttpProtocol = (CHttpProtocol *)param;
@@ -338,6 +337,7 @@ void *CHttpProtocol::ListenThread(LPVOID param)
 
 	while (1) // 循环调用accept接受新连接，并为每个新的连接创建一个新的线程来处理客户端请求
 	{
+		printf("----------SSL Handshake Start----------\n");
 		// printf("while!\n");
 		nLen = sizeof(SockAddr);
 		// 创建客户数据接收套接字（SockAddr用于接收客户端的相关信息）
@@ -402,6 +402,7 @@ void *CHttpProtocol::ClientThread(LPVOID param)
 	{
 		printf("SSL连接建立... \n");
 	}
+	printf("----------SSL  Handshake  End----------\n\n");
 
 	// 安全连接建立成功，开始处理客户端请求
 	// 设置缓冲读取，可以大大提高读取效率
@@ -411,27 +412,24 @@ void *CHttpProtocol::ClientThread(LPVOID param)
 	BIO_push(io, ssl_bio);				  // 缓冲区和ssl_bio关联
 
 	// 开始获取客户端请求数据
-	printf("****************\r\n");
-
-	// Rest of the code goes here...
 	if (!pHttpProtocol->SSLRecvRequest(ssl, io, buf, sizeof(buf)))
 	{
 		pHttpProtocol->err_exit("Receiving SSLRequest error!! \r\n");
 	}
 	else
 	{
-		printf("Request received!! \n");
 		printf("%s \n", buf);
-		// return 0;
 	}
 	// 开始分析客户端请求
 	nRet = pHttpProtocol->Analyze(pReq, buf);
 	if (nRet)
 	{
 		// 分析请求失败，直接断开连接
+		printf("Analyzing request from client error!!\r\n");
 		pHttpProtocol->Disconnect(pReq);
 		delete pReq;
-		pHttpProtocol->err_exit("Analyzing request from client error!!\r\n");
+		SSL_free(ssl);
+		return NULL;
 	}
 
 	// 读取请求body
@@ -442,21 +440,27 @@ void *CHttpProtocol::ClientThread(LPVOID param)
 		nRet = BIO_read(io, temp, pReq->contentLength);
 		if (nRet <= 0)
 		{
+			printf("Reading body error!!\r\n");
 			pHttpProtocol->Disconnect(pReq);
 			delete pReq;
-			pHttpProtocol->err_exit("Reading body error!!\r\n");
+			SSL_free(ssl);
+			return NULL;
 		}
 		temp[pReq->contentLength] = '\0';
 		sprintf(pReq->content, "%s", urlDecode(temp).c_str());
-		printf("Body: %s \n", pReq->content);
+		printf("%s\n", pReq->content);
 	}
+	printf("----------Request   End----------\n");
 
 	printf("Ready to send Response!!\n");
 
 	if (!pHttpProtocol->SSLSendResponse(pReq, io))
 	{
 		printf("Sending response error!!\n");
-		pHttpProtocol->err_exit("Sending fileheader error!\r\n");
+		pHttpProtocol->Disconnect(pReq);
+		delete pReq;
+		SSL_free(ssl);
+		return NULL;
 	}
 	BIO_flush(io);
 	printf("Response sent!!\n");
@@ -755,6 +759,7 @@ bool CHttpProtocol::SSLSendResponse(PREQUEST pReq, BIO *io)
 										   "name TEXT PRIMARY KEY,"
 										   "email TEXT,"
 										   "password TEXT);";
+
 			rc = sqlite3_exec(db, createTableQuery, 0, 0, 0);
 			if (rc != SQLITE_OK)
 			{
@@ -782,18 +787,14 @@ bool CHttpProtocol::SSLSendResponse(PREQUEST pReq, BIO *io)
 				message = "User registered successfully";
 				break;
 			case SQLITE_CONSTRAINT:
-				status = "error";
+				status = "success";
 				message = "User already exists";
 				break;
 			default:
+				STATUS = HTTP_STATUS_NOTFOUND;
 				status = "error";
 				message = "Internal server error";
 				break;
-			}
-			if (rc != SQLITE_OK)
-			{
-				STATUS = HTTP_STATUS_NOTFOUND;
-				printf("Cannot insert data: %s\n", sqlite3_errmsg(db));
 			}
 			// Close the database connection
 			sqlite3_close(db);
@@ -801,9 +802,73 @@ bool CHttpProtocol::SSLSendResponse(PREQUEST pReq, BIO *io)
 		// 获取到了登录数据，需要验证登录
 		else if (strstr(pReq->szFileName, "login") != NULL)
 		{
-		}
-		else
-		{
+			printf("try to login\n");
+			// Connect to the database
+			sqlite3 *db;
+			int rc = sqlite3_open("database.db", &db);
+			if (rc != SQLITE_OK)
+			{
+				printf("Cannot open database: %s\n", sqlite3_errmsg(db));
+				return false;
+			}
+			/* sqlite3_exec和callback回调函数之间的关系
+			首先，调用 sqlite3_exec() 时，SQLite 会执行你提供的 SQL 语句
+			如果这个SQL是一个查询并且查询到了一些数据，那么SQLite会对每一条记录调用你所提供的回调函数
+			int (*callback)(void *data, int argc, char **argv, char **azColName);
+			四个字段分别是：查询到的字段，字段的个数，字段的值，字段的名字
+			例如，如果你的查询是 SELECT name, email FROM users，并且查询到了一条记录 {name: 'Alice', email: 'alice@example.com'}
+			那么 SQLite 会这样调用你的回调函数
+			callback(data, 2, ['Alice', 'alice@example.com'], ['name', 'email']);
+			*/
+
+			json::iterator it;
+			string key[2];
+			string value[2];
+			int i;
+			for (i = 0, it = postData.begin(); it != postData.end(); ++it, i++)
+			{
+				key[i] = it.key();
+				value[i] = it.value();
+			}
+
+			sqlite3_stmt *stmt;
+			string selectQuery = "SELECT * FROM postData WHERE email='" + value[0] + "' AND password='" + value[1] + "';";
+
+			// 准备SQL语句
+			if (sqlite3_prepare_v2(db, selectQuery.c_str(), -1, &stmt, 0) != SQLITE_OK)
+			{
+				printf("Cannot prepare statement: %s\n", sqlite3_errmsg(db));
+				return false;
+			}
+			// 绑定参数
+			sqlite3_bind_text(stmt, 1, value[0].c_str(), -1, SQLITE_STATIC);
+			sqlite3_bind_text(stmt, 2, value[1].c_str(), -1, SQLITE_STATIC);
+			// 执行并获取第一条记录
+			rc = sqlite3_step(stmt);
+			// 查询到至少一条记录
+			if (rc == SQLITE_ROW)
+			{
+				status = "success";
+				message = "User logged in successfully";
+			}
+			// 未返回任何记录
+			else if (rc == SQLITE_DONE)
+			{
+				STATUS = HTTP_STATUS_NOTFOUND;
+				status = "error";
+				message = "User does not exist";
+			}
+			else
+			{
+				status = "error";
+				message = "Internal server error";
+				printf("Cannot execute statement: %s\n", sqlite3_errmsg(db));
+			}
+
+			sqlite3_finalize(stmt);
+
+			// Close the database connection
+			sqlite3_close(db);
 		}
 
 		printf("PostData: %s\n", postData.dump().c_str());

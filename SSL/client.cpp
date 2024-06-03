@@ -132,7 +132,6 @@ void HEAD_RE(SSL *ssl, BIO *io)
         printf("Failed to send HEAD request\n");
         return;
     }
-    printf("HEAD request sent successfully\n");
 
     char response[MAXBUF + 1];
     int bytes_received = SSL_read(ssl, response, MAXBUF);
@@ -142,7 +141,7 @@ void HEAD_RE(SSL *ssl, BIO *io)
         return;
     }
     response[bytes_received] = '\0';
-    printf("Received response:\n%s\n", response);
+    printf("----------Received  response----------\n%s----------Response terminate----------\n", response);
 }
 
 void GET_RE(SSL *ssl, BIO *io, char *filename)
@@ -194,8 +193,7 @@ void GET_RE(SSL *ssl, BIO *io, char *filename)
         }
     }
     Header[length] = '\0';
-
-    printf("Received response:\n%s\n", Header);
+    printf("----------Received  response----------\n%s----------Response terminate----------\n", Header);
 
     // 读取主体
     memset(buf, 0, MAXBUF);
@@ -222,13 +220,21 @@ void POST_RE(SSL *ssl, BIO *io, char *action)
     char request[MAXBUF] = {};
     char postData[MAXBUF] = {};
     int bytes_sent;
-    printf("Please input your name,email,password\n");
     char name[MAXBUF], email[MAXBUF], password[MAXBUF];
-    scanf("%s %s %s", name, email, password);
+    if (strcmp(action, "login") == 0)
+    {
+        printf("Please input your email,password\n");
+        scanf("%s %s", email, password);
+        sprintf(postData, "email=%s&password=%s", email, password);
+    }
+    else if (strcmp(action, "signup") == 0)
+    {
+        printf("Please input your name,email,password\n");
+        scanf("%s %s %s", name, email, password);
+        sprintf(postData, "name=%s&email=%s&password=%s", name, email, password);
+    }
 
-    sprintf(postData, "name=%s&email=%s&password=%s", name, email, password);
-
-    printf("POST data: %s\n", postData);
+    // printf("POST data: %s\n", postData);
 
     sprintf(request, "POST /post/%s HTTP/1.1\r\n"
                      "Host: %s\r\n"
@@ -255,7 +261,7 @@ void POST_RE(SSL *ssl, BIO *io, char *action)
         return;
     }
     response[bytes_received] = '\0';
-    printf("Received response:\n%s\n", response);
+    printf("----------Received  response----------\n%s----------Response terminate----------\n", response);
 }
 
 void DELETE_RE(SSL *ssl, BIO *io, char *filename)
@@ -284,7 +290,7 @@ void DELETE_RE(SSL *ssl, BIO *io, char *filename)
         return;
     }
     response[bytes_received] = '\0';
-    printf("Received response:\n%s\n", response);
+    printf("----------Received  response----------\n%s----------Response terminate----------\n", response);
 }
 
 int main(int argc, char *argv[])
@@ -367,8 +373,8 @@ int main(int argc, char *argv[])
         }
         else
         {
-            printf("Connected with %s encryption\n", SSL_get_cipher(ssl));
-            ShowCerts(ssl);
+            // printf("Connected with %s encryption\n", SSL_get_cipher(ssl));
+            // ShowCerts(ssl);
         }
 
         io = BIO_new(BIO_f_buffer());
@@ -377,16 +383,16 @@ int main(int argc, char *argv[])
         BIO_push(io, ssl_bio);
         // 接下来，我们可以使用 io 来读写数据，而不用直接使用 sockfd
 
-        printf("Enter message type to send: HEAD, GET, POST\n");
-
-        char message_type[10];
         char filename[100];
         char action[100];
+        char message_type[10];
+
+        printf("Usage: please type <HEAD|GET|POST|DELETE> to send test request\n");
         scanf("%s", message_type);
 
         if (strcmp(message_type, "GET") == 0)
         {
-            printf("Enter filename to GET\n");
+            printf("Please enter filename you want to get\n");
             scanf("%s", filename);
             GET_RE(ssl, io, filename);
         }
@@ -394,13 +400,13 @@ int main(int argc, char *argv[])
             HEAD_RE(ssl, io);
         else if (strcmp(message_type, "POST") == 0)
         {
-            printf("Enter action to GET: <signup|login>\n");
+            printf("Please enter post action: <signup|login>\n");
             scanf("%s", action);
             POST_RE(ssl, io, action);
         }
         else if (strcmp(message_type, "DELETE") == 0)
         {
-            printf("Enter filename to GET\n");
+            printf("Please enter filename you want to delete\n");
             scanf("%s", filename);
             DELETE_RE(ssl, io, filename);
         }

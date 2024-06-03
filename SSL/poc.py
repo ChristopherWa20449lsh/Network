@@ -179,7 +179,7 @@ def main():
 
     # create socket
     # s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    
+
     # connect server
     # s.connect((args[0], opts.port))
 
@@ -234,7 +234,6 @@ def main():
         s.send(hello)
 
         print 'Waiting for Server Hello...'
-
 
         while True:
             typ, ver, pay = recvmsg(s)
