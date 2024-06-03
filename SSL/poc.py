@@ -250,7 +250,6 @@ def main():
         # start sending heartbeat request
         s.send(hb)
         hit_hb(s, hb)
-        s.close()
 
         time.sleep(3)
 
